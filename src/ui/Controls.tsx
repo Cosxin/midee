@@ -78,6 +78,14 @@ export class Controls {
 
   private disposeRoot: (() => void) | null = null
 
+  // Content-driven label collapse (see evaluateCompact + the .ts-compact rules
+  // in main.css). Observers re-run the measurement on strip resize and on
+  // title-text changes (a new song doesn't change the strip's size).
+  private titleEl: HTMLElement | null = null
+  private compactRO: ResizeObserver | null = null
+  private compactMO: MutationObserver | null = null
+  private compactRaf = 0
+
   private isScrubbing = false
   private learnFileName: string | null = null
   private lastDisplaySec = -1
@@ -185,6 +193,7 @@ export class Controls {
             onLearnThis={() => opts.onLearnThis?.()}
             registerEl={(el) => {
               this.topStripEl = el
+              this.setupCompactObserver(el)
             }}
             registerTracksBtn={(el) => {
               this.tracksBtn = el
@@ -496,9 +505,54 @@ export class Controls {
     document.removeEventListener('keydown', this.onKeyDownDoc)
     this.disposeRoot?.()
     this.disposeRoot = null
+    this.compactRO?.disconnect()
+    this.compactRO = null
+    this.compactMO?.disconnect()
+    this.compactMO = null
+    if (this.compactRaf) cancelAnimationFrame(this.compactRaf)
+    this.compactRaf = 0
   }
 
   // ── Private helpers ─────────────────────────────────────────────────
+
+  // Collapse the secondary right-cluster labels to icons only when keeping them
+  // would clip the Now-Playing title. Measuring always from the expanded
+  // (labels-shown) baseline makes the decision a pure function of strip width +
+  // title length, so there's no collapse↔expand oscillation and no hysteresis
+  // needed. The strip's own width is fixed by layout, so toggling .ts-compact
+  // never re-triggers the ResizeObserver (no feedback loop).
+  private setupCompactObserver(strip: HTMLElement): void {
+    this.compactRO = new ResizeObserver(() => this.scheduleCompactEval())
+    this.compactRO.observe(strip)
+    const title = strip.querySelector<HTMLElement>('.ts-status-title')
+    if (title) {
+      this.titleEl = title
+      this.compactMO = new MutationObserver(() => this.scheduleCompactEval())
+      this.compactMO.observe(title, { characterData: true, childList: true, subtree: true })
+    }
+    this.scheduleCompactEval()
+  }
+
+  private scheduleCompactEval = (): void => {
+    if (this.compactRaf) return // coalesce bursts of resize/mutation into one eval
+    this.compactRaf = requestAnimationFrame(() => {
+      this.compactRaf = 0
+      this.evaluateCompact()
+    })
+  }
+
+  private evaluateCompact(): void {
+    const strip = this.topStripEl
+    const title = this.titleEl ?? strip?.querySelector<HTMLElement>('.ts-status-title') ?? null
+    if (!strip || !title) return
+    this.titleEl = title
+    // Reading scrollWidth/clientWidth after dropping .ts-compact forces a
+    // synchronous reflow, but the browser only paints after this callback
+    // returns — so re-adding the class (when not clipping) is flicker-free.
+    strip.classList.remove('ts-compact')
+    const clips = title.scrollWidth - title.clientWidth > 1
+    strip.classList.toggle('ts-compact', clips)
+  }
 
   private handlePlayClick(): void {
     const { store, clock } = this.opts.services

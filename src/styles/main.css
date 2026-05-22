@@ -685,7 +685,9 @@ body {
     padding: 0 11px;
   }
   .ts-status {
-    justify-self: start;
+    /* Box still stretches+shrinks with the track (see base rule); at this
+       tier just hug the content to the left edge to sit nearer the strip. */
+    justify-content: flex-start;
   }
 }
 
@@ -887,6 +889,27 @@ body {
   justify-content: flex-end;
   gap: 6px;
   flex-shrink: 0;
+}
+
+/* Secondary right-cluster controls collapse to icon-only ONLY when showing
+   their labels would clip the centered Now-Playing title. The decision is
+   content-driven (not a fixed width breakpoint): Controls runs a ResizeObserver
+   that toggles `.ts-compact` on #top-strip when the title clips — see
+   Controls.evaluateCompact(). Export, the instrument selector, MIDI, and the
+   mode switch always keep their labels; the full title is available via the
+   native hover tooltip. Label span is the SECOND child (`> span + span`);
+   the first child holds the icon SVG and stays. */
+#top-strip.ts-compact #ts-open > span + span,
+#top-strip.ts-compact #ts-tracks > span + span,
+#top-strip.ts-compact #ts-learn-this > span + span,
+#top-strip.ts-compact .ts-customize-label {
+  display: none;
+}
+#top-strip.ts-compact #ts-open,
+#top-strip.ts-compact #ts-tracks,
+#top-strip.ts-compact #ts-learn-this {
+  padding: 0 10px;
+  gap: 0;
 }
 
 /* Wordmark — click to home */
@@ -2441,12 +2464,24 @@ body {
 /* ─── Status display (center zone) — display-only, not interactive ─── */
 
 .ts-status {
-  display: inline-flex;
-  justify-self: center;
+  display: flex;
+  /* stretch — NOT center. A non-stretched grid item is content-sized and
+     OVERFLOWS a track that's smaller than its content; minmax(0,1fr) only
+     stops it from widening the track, not from spilling out of it. So the
+     title never got constrained and ellipsis never engaged. Stretching the
+     item to the track (min-width:0) makes it shrink with the track; we
+     re-center the content with justify-content + margin-inline:auto. */
+  justify-self: stretch;
+  justify-content: center;
   align-items: center;
   gap: 10px;
+  /* No margin-inline:auto and no box max-width here: auto margins DISABLE
+     grid stretch (item reverts to content size and overflows), and a box
+     max-width caps the stretch so it can't shrink to a starved track. The
+     box fills the 1fr track and shrinks with it; content stays centered via
+     justify-content; the title's own max-width (320px) caps it on wide
+     screens. */
   min-width: 0;
-  max-width: 520px;
   height: 36px;
   padding: 0 14px;
   color: var(--text);
@@ -2490,7 +2525,13 @@ body {
 .ts-status-main {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  /* stretch — NOT flex-start. In a flex column the cross axis is width;
+     flex-start sizes the title to its own content (capped only by its
+     max-width) so when the grid track is squeezed the title keeps its
+     natural width and overflows the shrunken column into .ts-end instead
+     of truncating. stretch binds the title to the column width, so
+     text-overflow: ellipsis finally engages. Text stays left-aligned. */
+  align-items: stretch;
   line-height: 1.1;
   min-width: 0;
 }

@@ -169,6 +169,16 @@ type EventMap = {
     completed: boolean
   }
   exercise_abandoned: { exercise_id: string; duration_s: number }
+  // What the user chose at the post-exercise summary — the practice-retention
+  // loop. 'dismissed' is the auto-fade / no-action path (see SessionSummary).
+  exercise_summary_action: {
+    exercise_id: string
+    action: 'again' | 'next' | 'dismissed'
+  }
+
+  // Feedback portal (self-hosted Fider) outbound clicks. `source` identifies
+  // which surface drove the click.
+  feedback_clicked: { source: 'customize_menu' | 'post_session' }
 }
 
 export type EventName = keyof EventMap

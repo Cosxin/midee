@@ -5,6 +5,7 @@
 import { createSignal } from 'solid-js'
 import { Portal, render } from 'solid-js/web'
 import { t, tn } from '../i18n'
+import { trackEvent } from '../telemetry'
 import { icons } from './icons'
 import { FEEDBACK_URL } from './utils'
 
@@ -86,6 +87,7 @@ function PostSessionView(props: ViewProps) {
             href={FEEDBACK_URL}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackEvent('feedback_clicked', { source: 'post_session' })}
           >
             {t('feedback.postSession')} ↗
           </a>

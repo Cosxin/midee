@@ -180,7 +180,7 @@ export function TopStripView(props: TopStripProps) {
           <span class="ts-status-kicker" id="ts-context-kicker">
             {props.context().kicker}
           </span>
-          <span class="ts-status-title" id="ts-context-title">
+          <span class="ts-status-title" id="ts-context-title" title={props.context().title}>
             {props.context().title}
           </span>
         </span>

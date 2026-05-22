@@ -1,5 +1,6 @@
 import { onCleanup, Show } from 'solid-js'
 import { t } from '../../i18n'
+import { trackEvent } from '../../telemetry'
 import type { ExerciseResult } from '../core/Result'
 import { createMountHandle } from './mountComponent'
 
@@ -23,8 +24,16 @@ function SessionSummaryView(props: ViewProps) {
   const fade = props.autoFadeMs ?? 4000
   if (fade > 0) {
     // onCleanup fires when the caller disposes the Solid root (via dismiss()).
-    // That covers both the auto-fade and user-triggered paths cleanly.
-    const timer = setTimeout(() => props.onDismiss(), fade)
+    // That covers both the auto-fade and user-triggered paths cleanly. The
+    // timer only fires on true no-action auto-fade — a button click disposes
+    // the root first, clearing it via onCleanup — so this won't double-count.
+    const timer = setTimeout(() => {
+      trackEvent('exercise_summary_action', {
+        exercise_id: props.result.exerciseId,
+        action: 'dismissed',
+      })
+      props.onDismiss()
+    }, fade)
     onCleanup(() => clearTimeout(timer))
   }
   return (
@@ -48,6 +57,10 @@ function SessionSummaryView(props: ViewProps) {
             class="session-summary__btn"
             type="button"
             onClick={() => {
+              trackEvent('exercise_summary_action', {
+                exercise_id: props.result.exerciseId,
+                action: 'again',
+              })
               props.onDismiss()
               props.onAgain()
             }}
@@ -58,6 +71,10 @@ function SessionSummaryView(props: ViewProps) {
             class="session-summary__btn session-summary__btn--primary"
             type="button"
             onClick={() => {
+              trackEvent('exercise_summary_action', {
+                exercise_id: props.result.exerciseId,
+                action: 'next',
+              })
               props.onDismiss()
               props.onNext()
             }}

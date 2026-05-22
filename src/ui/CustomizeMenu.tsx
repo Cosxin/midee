@@ -3,6 +3,7 @@ import { render } from 'solid-js/web'
 import { LOCALES, type LocaleCode, locale, t } from '../i18n'
 import type { ParticleStyle, ParticleStyleInfo } from '../renderer/ParticleSystem'
 import type { Theme } from '../renderer/theme'
+import { trackEvent } from '../telemetry'
 import { FEEDBACK_URL, isNarrowViewport } from './utils'
 
 // Aesthetics popover — collapses theme, particles, and chord overlay (three
@@ -197,6 +198,7 @@ function MenuView(props: MenuProps) {
             href={FEEDBACK_URL}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackEvent('feedback_clicked', { source: 'customize_menu' })}
           >
             <span class="customize-feedback-icon" aria-hidden="true">
               <svg
