@@ -5,7 +5,7 @@
 //
 // Shape:
 //   · Source of truth is `locales/en.ts`. All keys must exist there.
-//   · Other locales (`fr`, `es`, `pt-BR`) are lazy-loaded on demand so the
+//   · Other locales (`fr`, `es`, `pt-BR`, `zh-CN`, `pl`) are lazy-loaded on demand so the
 //     main bundle only ships English.
 //   · `t(key, { var })` — straight string lookup with `{var}` interpolation.
 //   · `tn(base, count, { var })` — plural via `Intl.PluralRules`. Looks up
@@ -22,7 +22,7 @@ export type { MessageKey, Messages } from './locales/en'
 
 // Add a new locale here, in `LOCALES`, and create the corresponding file
 // under `locales/`. TypeScript will then enforce key parity via `Messages`.
-export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'pt-BR'] as const
+export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'pt-BR', 'zh-CN', 'pl'] as const
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number]
 
 // Native-language label used in the locale picker — users recognise their
@@ -32,6 +32,8 @@ export const LOCALES: Array<{ code: LocaleCode; nativeName: string }> = [
   { code: 'fr', nativeName: 'Français' },
   { code: 'es', nativeName: 'Español' },
   { code: 'pt-BR', nativeName: 'Português (BR)' },
+  { code: 'zh-CN', nativeName: '简体中文' },
+  { code: 'pl', nativeName: 'Polski' },
 ]
 
 const SUPPORTED_SET = new Set<string>(SUPPORTED_LOCALES)
@@ -43,6 +45,8 @@ const LOADERS: Record<Exclude<LocaleCode, 'en'>, () => Promise<{ default: Messag
   fr: () => import('./locales/fr'),
   es: () => import('./locales/es'),
   'pt-BR': () => import('./locales/pt-BR'),
+  'zh-CN': () => import('./locales/zh-CN'),
+  pl: () => import('./locales/pl'),
 }
 
 // Messages are the reactive dependency for `t()`. Any JSX (or effect) that
@@ -106,11 +110,14 @@ export function formatDate(d: Date, options?: Intl.DateTimeFormatOptions): strin
 
 // ── Lifecycle ────────────────────────────────────────────────────
 
-function resolveLocale(tag: string | null | undefined): LocaleCode | null {
+// Exported for unit testing — the locale-negotiation logic (region → base
+// language, `zh-*` → `zh-CN`) is pure and is where regressions slip in.
+export function resolveLocale(tag: string | null | undefined): LocaleCode | null {
   if (!tag) return null
   if (SUPPORTED_SET.has(tag)) return tag as LocaleCode
   // Fall back from region-specific tag to base language (e.g. "fr-CA" → "fr")
   const base = tag.split('-')[0]
+  if (base === 'zh') return 'zh-CN'
   if (base && SUPPORTED_SET.has(base)) return base as LocaleCode
   return null
 }
