@@ -81,6 +81,11 @@ export interface HudProps {
   togglePinRef: (fn: () => void) => void
   onIdleChange: (idle: boolean) => void
   onHasDragged: () => void
+  // Session-only collapse: when closed, the pill shrinks to a small draggable
+  // icon (handled inside FloatingHud). Not persisted — always starts open.
+  closed: () => boolean
+  onClose: () => void
+  onReopen: () => void
 }
 
 export interface KeyHintProps {
@@ -290,6 +295,9 @@ export function HudView(props: HudProps) {
       togglePinRef={props.togglePinRef}
       onIdleChange={props.onIdleChange}
       onHasDragged={props.onHasDragged}
+      collapsed={props.closed}
+      onClose={props.onClose}
+      onReopen={props.onReopen}
     >
       <div class="hud-bar">
         <div class="hud-group hud-group--transport">

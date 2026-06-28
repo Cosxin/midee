@@ -1238,6 +1238,7 @@ body {
   grid-template-columns: 60px 1fr auto;
   align-items: center;
   gap: 20px;
+  width: 100%;
   padding: 22px 24px;
   border-radius: 18px;
   border: 1px solid var(--border);
@@ -1287,70 +1288,55 @@ body {
   margin: 0;
   max-width: 520px;
 }
-.hero-card__hint {
-  font: 400 12px / 1.4 var(--font);
-  color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
-  margin: 4px 0 0;
-}
 .hero-card__actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
 }
-.hero-card__primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 18px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #0a0a14;
-  border: none;
-  font: 600 13px / 1 var(--font);
+/* The hero card is itself the button. The corner icon is the affordance. */
+.hero-card--clickable {
   cursor: pointer;
-  box-shadow:
-    0 10px 30px -8px color-mix(in srgb, var(--accent) 60%, transparent),
-    0 1px 0 rgba(255, 255, 255, 0.3) inset;
   transition:
     transform 0.15s var(--ease-spring),
-    filter 0.15s ease,
+    border-color 0.15s ease,
     box-shadow 0.2s ease;
 }
-.hero-card__primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
+.hero-card--clickable:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
   box-shadow:
-    0 14px 34px -8px color-mix(in srgb, var(--accent) 70%, transparent),
-    0 1px 0 rgba(255, 255, 255, 0.3) inset;
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 18px 42px rgba(0, 0, 0, 0.28);
 }
-.hero-card__primary:active {
-  transform: translateY(0) scale(0.98);
+.hero-card--clickable:active {
+  transform: translateY(0) scale(0.995);
 }
-.hero-card__primary-icon {
+.hero-card--clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 3px;
+}
+/* Circular accent affordance in the corner — reads as "go". */
+.hero-card__cue-icon {
   display: inline-flex;
   align-items: center;
-}
-.hero-card__secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font: 600 11.5px / 1 var(--font);
-  cursor: pointer;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
   transition:
-    color 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease;
+    transform 0.15s var(--ease-spring);
 }
-.hero-card__secondary:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--border-hi);
+.hero-card__cue-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.hero-card--clickable:hover .hero-card__cue-icon {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  transform: scale(1.06);
 }
 
 /* ─── Samples strip inside Learn hub ─────────────────────── */
@@ -1440,11 +1426,6 @@ body {
   height: auto;
   padding: 10px 14px 12px 0;
   align-items: flex-start;
-}
-
-/* Suppress the generic float-hud__sep; handle's border-right already separates. */
-.float-hud.pa-hud > .float-hud__sep {
-  display: none;
 }
 
 /* Two-row grid: [transport | meta] on row 1, [options] spanning row 2.
@@ -1848,9 +1829,6 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-}
-.pa-hud__close {
-  margin-left: auto;
 }
 
 /* Live stats panel — always visible during play. Two tiers:
@@ -2851,17 +2829,22 @@ body {
   background: rgba(7, 7, 15, 0.93);
   backdrop-filter: blur(48px) saturate(160%);
   -webkit-backdrop-filter: blur(48px) saturate(160%);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
+  /* Raised "polished glass": soft drop shadow lifts it off the canvas, a bright
+     top sheen + a darker bottom edge give the pill a subtle bevel. */
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.75),
     0 8px 24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
   transition: opacity 0.35s var(--ease-out, cubic-bezier(0.15, 0.88, 0.35, 1));
 }
 
-/* Idle: learn HUDs dim to 28%; main HUD (#hud) overrides to fully hide */
-.float-hud.float-hud--idle:not(.float-hud--pinned):not(.float-hud--dragging):not(:hover) {
+/* Idle: learn HUDs dim to 28%; main HUD (#hud) overrides to fully hide.
+   Hover is handled in JS (idle is suppressed while pointing at the pill), so
+   the fade tracks idle() alone — keeping the HUD and top-strip dim in sync. */
+.float-hud.float-hud--idle:not(.float-hud--pinned):not(.float-hud--dragging) {
   opacity: 0.28;
 }
 
@@ -2882,16 +2865,7 @@ body {
   gap: 2px;
   padding: 0 4px 0 10px;
   border-right: 1px solid var(--border);
-  margin-right: 2px;
-  flex-shrink: 0;
-}
-
-/* Thin vertical separator between sections */
-.float-hud__sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 12px;
+  margin-right: 8px;
   flex-shrink: 0;
 }
 
@@ -2914,7 +2888,7 @@ body {
 
 /* Main HUD idle: fully hide + slide down — learn HUDs only dim.
    Own transition so the slide only animates on idle-state change, not on drag. */
-#hud.hud--active.float-hud--idle:not(.float-hud--pinned):not(.float-hud--dragging):not(:hover) {
+#hud.hud--active.float-hud--idle:not(.float-hud--pinned):not(.float-hud--dragging) {
   opacity: 0;
   pointer-events: none;
   transform: translateX(calc(-50% + var(--hud-dx, 0px))) translateY(calc(var(--hud-dy, 0px) + 14px));
@@ -3007,6 +2981,153 @@ body {
   transform: rotate(-18deg);
 }
 .hud-pin-btn.hud-pin-btn--on:hover {
+  color: var(--accent);
+}
+
+/* Close (✕) button — collapses the whole HUD for the session. Sits at the
+   right edge of the pill, mirroring the pin button in the left handle cluster. */
+/* Circular ghost button — a recognizable "dismiss" affordance, set apart from
+   the square-ish controls. A faint disc + hairline ring give it presence at
+   rest without shouting; it lifts to a clearer button on hover. */
+.hud-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.12s var(--ease-spring);
+}
+.hud-close-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-hi);
+}
+.hud-close-btn:active {
+  transform: scale(0.9);
+}
+
+/* ── Collapsed HUD ────────────────────────────────────────────────
+   Closing shrinks the whole pill to a small draggable icon that keeps the
+   HUD's glass + drag offset. Used by the main HUD and both learn HUDs.
+   Everything except the reopen icon is hidden. */
+.float-hud--collapsed > *:not(.float-hud__reopen) {
+  display: none;
+}
+
+/* Shared collapsed look — faint accent edge + soft static glow, no animation.
+   Per-HUD selectors so each beats its own base sizing regardless of source
+   order (sr-hud's base rule sits later in this file). */
+#hud.float-hud--collapsed,
+.float-hud.pa-hud.float-hud--collapsed,
+.float-hud.sr-hud.float-hud--collapsed {
+  padding: 0;
+  gap: 0;
+  border-radius: 16px;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(249, 115, 22, 0.28);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.5),
+    0 0 12px rgba(249, 115, 22, 0.14);
+}
+.float-hud--collapsed:hover {
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+/* Main HUD collapses to a plain square icon. */
+#hud.float-hud--collapsed {
+  width: 46px;
+  min-width: 46px;
+  max-width: 46px;
+  height: 46px;
+}
+
+/* Learn HUDs collapse to a score chip that fits its content. */
+.float-hud.pa-hud.float-hud--collapsed,
+.float-hud.sr-hud.float-hud--collapsed {
+  width: auto;
+  min-width: 0;
+  max-width: max-content;
+  height: 44px;
+}
+
+/* The reopen control fills the collapsed pill — it's the drag surface and the
+   click-to-reopen target. Hidden until collapsed. */
+.float-hud__reopen {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: grab;
+  border-radius: inherit;
+  touch-action: none;
+  transition: color 0.15s;
+}
+.float-hud--collapsed .float-hud__reopen {
+  display: inline-flex;
+}
+.float-hud--collapsed.float-hud--dragging .float-hud__reopen {
+  cursor: grabbing;
+}
+.float-hud__reopen-icon {
+  display: inline-flex;
+  transition: transform 0.12s var(--ease-spring);
+}
+.float-hud__reopen:hover .float-hud__reopen-icon {
+  transform: scale(1.08);
+}
+/* Learn chip needs side padding to breathe; main icon stays centered. */
+.float-hud.pa-hud .float-hud__reopen,
+.float-hud.sr-hud .float-hud__reopen {
+  width: auto;
+  padding: 0 15px;
+}
+
+/* Collapsed learn score: reuse each exercise's own expanded stat styles so the
+   chip matches the bar exactly. Sight-reading just needs a layout wrapper. */
+.sr-hud__collapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Play-along collapsed readout — borderless inside the accent pill (no nested
+   chip borders), accuracy as the accent headline. */
+.pa-hud__mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.pa-hud__mini-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 13px / 1 var(--font);
+  color: var(--text-muted);
+}
+.pa-hud__mini-streak--hot {
+  color: #ffd166;
+}
+.pa-hud__mini-acc {
+  font: 700 14.5px / 1 var(--font);
   color: var(--accent);
 }
 
@@ -7366,25 +7487,6 @@ body.canvas-hidden #kbd-resizer {
 }
 
 /* Close button */
-.sr-hud__close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.35);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-.sr-hud__close:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.7);
-}
 
 /* ─── Sight-reading end panel ───────────────────────────── */
 

@@ -105,6 +105,8 @@ export const en = {
   'hud.loopClear': 'Clear loop',
   'hud.drag': 'Drag to move controls',
   'hud.pin': 'Pin — prevents auto-hide',
+  'hud.close': 'Hide controls',
+  'hud.reopen': 'Show controls',
   'hud.volume': 'Volume',
   'hud.speed': 'Playback speed',
   'hud.zoom': 'Zoom (note height)',
@@ -278,8 +280,6 @@ export const en = {
   'learn.sr.accuracyTip': 'Accuracy',
   'learn.sr.restartAria': 'Restart session',
   'learn.sr.restartTip': 'Restart',
-  'learn.sr.closeAria': 'Back to hub',
-  'learn.sr.closeTip': 'Back to hub',
 
   // Sight-reading end panel.
   'learn.sr.end.knockedOut': 'Knocked out',
@@ -353,8 +353,6 @@ export const en = {
   'learn.pa.playTip': 'Play / pause (Space)',
   'learn.pa.scrubAria': 'Scrubber',
   'learn.pa.scrubTip': 'Drag to seek',
-  'learn.pa.backAria': 'Back to learn hub',
-  'learn.pa.backTip': 'Back to hub (Esc)',
   'learn.pa.speedAria': 'Speed',
   'learn.pa.speedLabel': 'Speed',
   'learn.pa.speedSlowTip': 'Slow · 60% ([)',

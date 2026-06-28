@@ -87,6 +87,8 @@ const fr: Messages = {
   'hud.loopClear': 'Effacer la boucle',
   'hud.drag': 'Glissez pour déplacer les commandes',
   'hud.pin': 'Épingler — empêche le masquage automatique',
+  'hud.close': 'Masquer les commandes',
+  'hud.reopen': 'Afficher les commandes',
   'hud.volume': 'Volume',
   'hud.speed': 'Vitesse de lecture',
   'hud.zoom': 'Zoom (hauteur des notes)',
@@ -255,8 +257,6 @@ const fr: Messages = {
   'learn.sr.accuracyTip': 'Accuracy',
   'learn.sr.restartAria': 'Restart session',
   'learn.sr.restartTip': 'Restart',
-  'learn.sr.closeAria': 'Back to hub',
-  'learn.sr.closeTip': 'Back to hub',
 
   // Sight-reading end panel.
   'learn.sr.end.knockedOut': 'Knocked out',
@@ -327,8 +327,6 @@ const fr: Messages = {
   'learn.pa.playTip': 'Lecture / pause (Espace)',
   'learn.pa.scrubAria': 'Curseur',
   'learn.pa.scrubTip': 'Glissez pour vous déplacer',
-  'learn.pa.backAria': "Retour au hub d'apprentissage",
-  'learn.pa.backTip': 'Retour au hub (Échap)',
   'learn.pa.speedAria': 'Vitesse',
   'learn.pa.speedLabel': 'Vitesse',
   'learn.pa.speedSlowTip': 'Lent · 60 % ([)',

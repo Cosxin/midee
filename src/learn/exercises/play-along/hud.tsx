@@ -1,14 +1,20 @@
-import { createEffect, createMemo, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { t } from '../../../i18n'
 import { watch } from '../../../store/watch'
 import { FloatingHud } from '../../../ui/FloatingHud'
-import { icons } from '../../../ui/icons'
 import { createMountHandle } from '../../ui/mountComponent'
 import { DEFAULT_SPEED_PRESETS, type PlayAlongEngine } from './engine'
 
 // Streak ≥ this is "hot" — saturated chip background. Below is "warm"
 // (visible but quieter). Below 1 the chip is hidden entirely.
 const STREAK_HOT_THRESHOLD = 5
+
+// Hits / (hits + errors), as a whole percent. 100 when nothing attempted yet.
+export function playAlongAccuracy(engine: PlayAlongEngine): number {
+  const hits = engine.state.perfect + engine.state.good
+  const attempts = hits + engine.state.errors
+  return attempts === 0 ? 100 : Math.round((100 * hits) / attempts)
+}
 
 function fmtTime(t: number): string {
   const s = Math.max(0, Math.floor(t))
@@ -32,7 +38,6 @@ const RAMP_GLYPH =
 
 export interface PlayAlongHudOptions {
   engine: PlayAlongEngine
-  onCloseExercise: () => void
   onMarkLoop: () => void
   onClearLoop: () => void
 }
@@ -40,11 +45,7 @@ export interface PlayAlongHudOptions {
 // Always-visible score panel.
 function LiveStats(props: { engine: PlayAlongEngine }) {
   const { engine } = props
-  const accuracyPct = createMemo(() => {
-    const hits = engine.state.perfect + engine.state.good
-    const attempts = hits + engine.state.errors
-    return attempts === 0 ? 100 : Math.round((100 * hits) / attempts)
-  })
+  const accuracyPct = createMemo(() => playAlongAccuracy(engine))
   const streakHot = () => engine.state.streak >= STREAK_HOT_THRESHOLD
   const streakWarm = () => engine.state.streak >= 1 && engine.state.streak < STREAK_HOT_THRESHOLD
   return (
@@ -109,6 +110,9 @@ function PlayAlongHudView(props: PlayAlongHudOptions) {
   // Wake the HUD out of idle whenever transport state changes.
   let hudWake: (() => void) | null = null
 
+  // Session-only collapse to a small draggable icon (same as the main HUD).
+  const [collapsed, setCollapsed] = createSignal(false)
+
   onMount(() => {
     const stop = watch(
       () => engine.state.userWantsToPlay,
@@ -163,6 +167,25 @@ function PlayAlongHudView(props: PlayAlongHudOptions) {
       class="pa-hud"
       storageKey="midee.learn.pa"
       idleEnabled={() => engine.state.userWantsToPlay}
+      collapsed={collapsed}
+      onClose={() => setCollapsed(true)}
+      onReopen={() => setCollapsed(false)}
+      collapsedContent={
+        <span class="pa-hud__mini">
+          <Show when={engine.state.streak > 0}>
+            <span
+              class="pa-hud__mini-streak"
+              classList={{
+                'pa-hud__mini-streak--hot': engine.state.streak >= STREAK_HOT_THRESHOLD,
+              }}
+            >
+              <span aria-hidden="true">🔥</span>
+              {engine.state.streak}
+            </span>
+          </Show>
+          <span class="pa-hud__mini-acc">{playAlongAccuracy(engine)}%</span>
+        </span>
+      }
       wakeRef={(fn) => {
         hudWake = fn
       }}
@@ -229,14 +252,6 @@ function PlayAlongHudView(props: PlayAlongHudOptions) {
 
         <div class="pa-hud__meta">
           <LiveStats engine={engine} />
-          <button
-            class="pa-hud__icon-btn pa-hud__close"
-            type="button"
-            aria-label={t('learn.pa.backAria')}
-            data-tip={t('learn.pa.backTip')}
-            onClick={() => props.onCloseExercise()}
-            innerHTML={icons.close(14)}
-          />
         </div>
 
         <div class="pa-hud__options">

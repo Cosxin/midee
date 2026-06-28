@@ -105,6 +105,8 @@ export class Controls {
   private readonly hudHasDraggedSig: () => boolean
   private readonly setInstrumentLoadingSig: (v: boolean) => void
   private readonly setKeyHintCollapsed: (v: boolean) => void
+  private readonly setHudClosed: (v: boolean) => void
+  private readonly hudClosedSig: () => boolean
   private readonly setOctave: (v: number) => void
   private readonly setVolume: (v: number) => void
   private readonly setSpeed: (v: number) => void
@@ -133,6 +135,8 @@ export class Controls {
     const [learnCoachmarkSeen, setLearnCoachmarkSeen] = createSignal(isLearnCoachmarkSeen())
     const [instrumentLoading, setInstrumentLoading] = createSignal(false)
     const [keyHintCollapsed, setKeyHintCollapsed] = createSignal(loadKeyHintHidden())
+    // Session-only: the HUD always starts open on load (not persisted).
+    const [hudClosed, setHudClosed] = createSignal(false)
     const [octave, setOctave] = createSignal(4)
     const [volume, setVolumeSig] = createSignal(store.state.volume ?? 0.8)
     const [speed, setSpeedSig] = createSignal(store.state.speed ?? 1)
@@ -158,6 +162,8 @@ export class Controls {
     this.hudHasDraggedSig = hudHasDragged
     this.setInstrumentLoadingSig = setInstrumentLoading
     this.setKeyHintCollapsed = setKeyHintCollapsed
+    this.setHudClosed = setHudClosed
+    this.hudClosedSig = hudClosed
     this.setOctave = setOctave
     this.setVolume = setVolumeSig
     this.setSpeed = setSpeedSig
@@ -322,6 +328,12 @@ export class Controls {
                 saveHudHasDragged()
               }
             }}
+            closed={hudClosed}
+            onClose={() => {
+              this.setHudClosed(true)
+              this.hudWake?.()
+            }}
+            onReopen={() => this.setHudClosed(false)}
           />
           {/* Mounted *after* HudView so the `#hud-drag` anchor exists when
               the coachmark's onMount looks it up. */}
@@ -336,6 +348,7 @@ export class Controls {
               status() !== 'loading' &&
               status() !== 'exporting' &&
               (mode() === 'play' || mode() === 'live') &&
+              !hudClosed() &&
               !hudIdle()
             }
             hasDragged={hudHasDragged}
@@ -603,6 +616,20 @@ export class Controls {
     if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === 'KeyP') {
       e.preventDefault()
       this.hudTogglePin?.()
+      return
+    }
+
+    // Bare H toggles the control bar, but only in the modes where it exists.
+    if (
+      e.code === 'KeyH' &&
+      !e.shiftKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      (mode === 'play' || mode === 'live')
+    ) {
+      e.preventDefault()
+      this.setHudClosed(!this.hudClosedSig())
       return
     }
 

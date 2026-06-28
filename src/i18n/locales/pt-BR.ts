@@ -84,6 +84,8 @@ const ptBR: Messages = {
   'hud.loopClear': 'Limpar loop',
   'hud.drag': 'Arraste para mover os controles',
   'hud.pin': 'Fixar — evita ocultar automaticamente',
+  'hud.close': 'Ocultar controles',
+  'hud.reopen': 'Mostrar controles',
   'hud.volume': 'Volume',
   'hud.speed': 'Velocidade de reprodução',
   'hud.zoom': 'Zoom (altura das notas)',
@@ -251,8 +253,6 @@ const ptBR: Messages = {
   'learn.sr.accuracyTip': 'Accuracy',
   'learn.sr.restartAria': 'Restart session',
   'learn.sr.restartTip': 'Restart',
-  'learn.sr.closeAria': 'Back to hub',
-  'learn.sr.closeTip': 'Back to hub',
 
   // Sight-reading end panel.
   'learn.sr.end.knockedOut': 'Knocked out',
@@ -323,8 +323,6 @@ const ptBR: Messages = {
   'learn.pa.playTip': 'Tocar / pausar (Espaço)',
   'learn.pa.scrubAria': 'Cursor',
   'learn.pa.scrubTip': 'Arraste para buscar',
-  'learn.pa.backAria': 'Voltar ao hub de aprendizado',
-  'learn.pa.backTip': 'Voltar ao hub (Esc)',
   'learn.pa.speedAria': 'Velocidade',
   'learn.pa.speedLabel': 'Velocidade',
   'learn.pa.speedSlowTip': 'Lento · 60% ([)',

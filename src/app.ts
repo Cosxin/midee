@@ -1425,7 +1425,9 @@ export class App {
     const mode = this.store.state.mode
 
     // Live performance — what the player and looper are pressing right now.
-    if (mode === 'live' || mode === 'home') {
+    // Learn counts here too: the user plays along, so the chord readout should
+    // narrate their held notes (the visibility gate already allows non-play).
+    if (mode === 'live' || mode === 'home' || mode === 'learn') {
       for (const [pitch] of this.liveNotes.heldNotes) set.add(pitch)
       for (const [pitch] of this.loopNotes.heldNotes) set.add(pitch)
       return set

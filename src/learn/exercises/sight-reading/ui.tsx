@@ -77,6 +77,8 @@ function SrControlBar(props: SightReadHudOptions) {
   const { engine } = props
 
   const [clef, setClef] = createSignal<ClefMode>(props.tier.clef)
+  // Session-only collapse to a small draggable icon (same as the main HUD).
+  const [collapsed, setCollapsed] = createSignal(false)
 
   const cycleClef = () => {
     const idx = CLEF_ORDER.indexOf(clef())
@@ -114,7 +116,24 @@ function SrControlBar(props: SightReadHudOptions) {
   }
 
   return (
-    <FloatingHud class="sr-hud" storageKey="midee.learn.sr" idleMs={2600}>
+    <FloatingHud
+      class="sr-hud"
+      storageKey="midee.learn.sr"
+      idleMs={2600}
+      collapsed={collapsed}
+      onClose={() => setCollapsed(true)}
+      onReopen={() => setCollapsed(false)}
+      collapsedContent={
+        <span class="sr-hud__collapsed">
+          <span class="sr-hud__lives" aria-hidden="true">
+            <For each={lifeDots()}>
+              {(alive) => <span class={alive ? 'sr-hud__dot' : 'sr-hud__dot sr-hud__dot--spent'} />}
+            </For>
+          </span>
+          <span class="sr-hud__acc">{accuracyPct() !== null ? `${accuracyPct()}%` : '—'}</span>
+        </span>
+      }
+    >
       {/* Streak — hidden at 0 */}
       <Show when={engine.state.streak > 0}>
         <span class={streakClass()}>
@@ -255,18 +274,6 @@ function SrControlBar(props: SightReadHudOptions) {
         data-tip={t('learn.sr.restartTip')}
         onClick={props.onRestart}
         innerHTML={icons.undo(13)}
-      />
-
-      <div class="sr-hud__sep" />
-
-      {/* Close */}
-      <button
-        type="button"
-        class="sr-hud__close"
-        aria-label={t('learn.sr.closeAria')}
-        data-tip={t('learn.sr.closeTip')}
-        onClick={props.onClose}
-        innerHTML={icons.close(13)}
       />
     </FloatingHud>
   )

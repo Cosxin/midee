@@ -85,43 +85,45 @@ function Hero(props: LearnHubOptions) {
     const label = categoryLabel(featured.category)
     return label.toLowerCase() === featured.title.toLowerCase() ? t('learn.hub.recommended') : label
   }
+  // The whole card is the affordance: upload a MIDI when none is loaded,
+  // otherwise start the play-along with the loaded piece.
+  const activate = (): void => {
+    if (loaded()) props.launchExercise(featured)
+    else props.onOpenFilePicker()
+  }
+  const actionLabel = (): string => {
+    const midi = loaded()
+    return midi ? t('learn.hub.startWith', { name: midi.name }) : t('learn.hub.uploadMidi')
+  }
+  // The card itself is the button — all-phrasing content (spans), so it's a
+  // valid, fully-clickable, keyboard-accessible <button>. The corner icon is
+  // the only affordance; aria-label carries the action for screen readers.
   return (
-    <div class="hero-card" data-category={featured.category}>
-      <div class="hero-card__badge" innerHTML={CATEGORY_ICON[featured.category]} />
-      <div class="hero-card__body">
+    <button
+      class="hero-card hero-card--clickable"
+      type="button"
+      data-category={featured.category}
+      aria-label={actionLabel()}
+      onClick={activate}
+    >
+      <span
+        class="hero-card__badge"
+        aria-hidden="true"
+        innerHTML={CATEGORY_ICON[featured.category]}
+      />
+      <span class="hero-card__body">
         <span class="hero-card__kicker">{kicker()}</span>
-        <h2 class="hero-card__title">{featured.title}</h2>
-        <p class="hero-card__blurb">{featured.blurb}</p>
-      </div>
-      <div class="hero-card__actions">
-        <Show
-          when={loaded()}
-          fallback={
-            <button
-              class="hero-card__primary"
-              type="button"
-              onClick={() => props.onOpenFilePicker()}
-            >
-              <span class="hero-card__primary-icon" aria-hidden="true" innerHTML={ICON_UPLOAD} />
-              <span class="hero-card__primary-label">{t('learn.hub.uploadMidi')}</span>
-            </button>
-          }
-        >
-          {(midi) => (
-            <button
-              class="hero-card__primary"
-              type="button"
-              onClick={() => props.launchExercise(featured)}
-            >
-              <span class="hero-card__primary-icon" aria-hidden="true" innerHTML={ICON_PLAY} />
-              <span class="hero-card__primary-label">
-                {t('learn.hub.startWith', { name: midi().name })}
-              </span>
-            </button>
-          )}
-        </Show>
-      </div>
-    </div>
+        <span class="hero-card__title">{featured.title}</span>
+        <span class="hero-card__blurb">{featured.blurb}</span>
+      </span>
+      <span class="hero-card__actions">
+        <span
+          class="hero-card__cue-icon"
+          aria-hidden="true"
+          innerHTML={loaded() ? ICON_PLAY : ICON_UPLOAD}
+        />
+      </span>
+    </button>
   )
 }
 

@@ -65,7 +65,6 @@ class PlayAlongExercise implements Exercise {
     this.hud = createPlayAlongHud()
     this.hudOpts = {
       engine: this.engine,
-      onCloseExercise: () => this.ctx.onClose('abandoned'),
       onMarkLoop: () => this.markLoop(),
       onClearLoop: () => this.clearLoop(),
     }

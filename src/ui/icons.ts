@@ -205,6 +205,15 @@ export const icons = {
       2.4,
     ),
 
+  // Slider/fader glyph for the HUD reopener — reads as "controls".
+  sliders: (size: Size = 14): string =>
+    svgStroke(
+      size,
+      `<line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/>` +
+        `<circle cx="9" cy="8" r="2.2"/><circle cx="15" cy="16" r="2.2"/>`,
+      1.9,
+    ),
+
   // Keycap glyph for the keyboard-hint reopener — reads as "keyboard help".
   keycap: (size: Size = 13): string =>
     svgStroke(

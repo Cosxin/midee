@@ -35,6 +35,17 @@ export interface FloatingHudProps {
   locked?: () => boolean
   // Called whenever pin state changes
   onPinChange?: (pinned: boolean) => void
+  // When provided, a close (✕) button is rendered at the right edge of the
+  // pill that collapses the HUD (caller sets collapsed()).
+  onClose?: () => void
+  // Collapsed = the pill shrinks to a single small icon that stays draggable.
+  // A click on it (pointer-up without a drag) calls onReopen; a drag moves it,
+  // sharing the same offset as the expanded pill.
+  collapsed?: () => boolean
+  onReopen?: () => void
+  // Optional content for the collapsed pill (e.g. a learn score chip). When
+  // omitted, the collapsed state shows a generic reopen icon.
+  collapsedContent?: JSX.Element
   // Called the first time the user drags the HUD (for Coachmark dismissal)
   onHasDragged?: () => void
   // Gives caller a function to reset the idle timer externally
@@ -104,7 +115,10 @@ export function FloatingHud(props: FloatingHudProps) {
   let dragStartY = 0
   let dragOriginX = 0
   let dragOriginY = 0
-
+  // Distinguishes a click (reopen) from a drag (move) on the collapsed icon.
+  let pointerMoved = false
+  const MOVE_THRESHOLD = 4
+  // While the pointer is over the pill we never idle — so the HUD *and* the
   // ── Idle-fade ───────────────────────────────────────────────────────────
 
   function clearTimer(): void {
@@ -114,9 +128,13 @@ export function FloatingHud(props: FloatingHudProps) {
     }
   }
 
+  // Idle is purely movement-based: any pointer move (anywhere — see the
+  // document listener in Controls) wakes the HUD; after idleMs of stillness it
+  // fades. Both the HUD and the idle()-driven top-strip dim flip together, and
+  // collapsed/expanded are governed identically (no `:hover` special-casing).
   function scheduleIdle(): void {
     clearTimer()
-    if (pinned() || props.locked?.() || props.idleEnabled?.() === false) return
+    if (dragging() || pinned() || props.locked?.() || props.idleEnabled?.() === false) return
     idleTimer = setTimeout(() => {
       setIdle(true)
       props.onIdleChange?.(true)
@@ -175,6 +193,9 @@ export function FloatingHud(props: FloatingHudProps) {
 
   function onPointerMove(e: PointerEvent): void {
     if (!dragging()) return
+    if (Math.abs(e.clientX - dragStartX) + Math.abs(e.clientY - dragStartY) > MOVE_THRESHOLD) {
+      pointerMoved = true
+    }
     setOffsetX(dragOriginX + (e.clientX - dragStartX))
     setOffsetY(dragOriginY + (e.clientY - dragStartY))
     clampOffset()
@@ -185,12 +206,18 @@ export function FloatingHud(props: FloatingHudProps) {
     setDragging(false)
     document.removeEventListener('pointermove', onPointerMove)
     document.removeEventListener('pointerup', onPointerUp)
-    saveOffset(props.storageKey, { x: offsetX(), y: offsetY() })
-    props.onHasDragged?.()
+    if (pointerMoved) {
+      saveOffset(props.storageKey, { x: offsetX(), y: offsetY() })
+      props.onHasDragged?.()
+    } else if (props.collapsed?.()) {
+      // A tap on the collapsed icon (no drag) reopens the HUD.
+      props.onReopen?.()
+    }
   }
 
   function startDrag(e: PointerEvent): void {
     e.preventDefault()
+    pointerMoved = false
     dragStartX = e.clientX
     dragStartY = e.clientY
     dragOriginX = offsetX()
@@ -237,6 +264,15 @@ export function FloatingHud(props: FloatingHudProps) {
     applyOffset()
   })
 
+  // Collapsing/expanding changes the pill's size — re-clamp on the next frame
+  // (after layout) so a small icon dragged to an edge doesn't leave the
+  // re-expanded pill hanging off-screen. Also wake on collapse so the icon is
+  // shown at full opacity (callers lock idle while collapsed).
+  createEffect(() => {
+    if (props.collapsed?.()) wake()
+    requestAnimationFrame(() => clampOffset())
+  })
+
   // Persist pin and notify caller whenever it changes.
   createEffect(() => {
     const p = pinned()
@@ -257,6 +293,7 @@ export function FloatingHud(props: FloatingHudProps) {
     'float-hud--dragging': dragging(),
     'float-hud--pinned': pinned(),
     'float-hud--idle': idle() && !pinned() && !dragging(),
+    'float-hud--collapsed': props.collapsed?.() ?? false,
     ...(props.classList?.() ?? {}),
   })
 
@@ -292,9 +329,34 @@ export function FloatingHud(props: FloatingHudProps) {
         />
       </div>
 
-      <div class="float-hud__sep" />
-
       {props.children}
+
+      {props.onClose && (
+        <button
+          class="hud-close-btn float-hud__close"
+          type="button"
+          aria-label={t('hud.close')}
+          data-tip={t('hud.close')}
+          onClick={() => props.onClose?.()}
+          innerHTML={icons.smallClose(10)}
+        />
+      )}
+
+      {/* Collapsed icon — only visible (via CSS) when float-hud--collapsed.
+          pointerdown drives the shared drag system; a tap reopens (onPointerUp). */}
+      {props.onReopen && (
+        <button
+          class="float-hud__reopen"
+          type="button"
+          aria-label={t('hud.reopen')}
+          data-tip={t('hud.reopen')}
+          onPointerDown={(e) => startDrag(e)}
+        >
+          {props.collapsedContent ?? (
+            <span class="float-hud__reopen-icon" innerHTML={icons.sliders(16)} />
+          )}
+        </button>
+      )}
     </div>
   )
 }
