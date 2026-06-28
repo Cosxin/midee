@@ -79,10 +79,6 @@ export class VideoExporter {
   async export(opts: ExportOptions): Promise<void> {
     const mode: ExportMode = opts.mode ?? 'av'
 
-    if (mode === 'audio-only') {
-      return this.exportAudioOnly(opts)
-    }
-
     if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') {
       throw new Error(
         'This browser does not support WebCodecs video export. ' +
@@ -231,45 +227,6 @@ export class VideoExporter {
       if (encoder.state !== 'closed') encoder.close()
       this.encoder = null
     }
-  }
-
-  // Audio-only path: skip all video encoding and mux just the audio buffer
-  // into an MP4 container. Output is .m4a (AAC-in-MP4, universally playable).
-  private async exportAudioOnly(opts: ExportOptions): Promise<void> {
-    const audio = opts.audio
-    if (!audio) throw new Error('Audio-only export requires an audio buffer')
-
-    if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') {
-      throw new Error(
-        'This browser does not support WebCodecs audio export. ' +
-          'Update to a recent Chrome, Safari 17+, or Firefox 133+.',
-      )
-    }
-
-    const bufferTarget = new BufferTarget()
-    const output = new Output({
-      format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
-      target: bufferTarget,
-    })
-    const audioSource = new EncodedAudioPacketSource('aac')
-    output.addAudioTrack(audioSource)
-    await output.start()
-
-    await this.encodeAudio(audio, audioSource, opts.onProgress)
-    this.throwIfStopped(null)
-    audioSource.close()
-
-    opts.onProgress?.('Finalizing', 0)
-    await output.finalize()
-    opts.onProgress?.('Finalizing', 1)
-
-    opts.onProgress?.('Saving', 0)
-    const buffer = bufferTarget.buffer
-    if (!buffer) throw new Error('Export produced no file buffer')
-    const blob = new Blob([buffer], { type: 'audio/mp4' })
-    triggerDownload(URL.createObjectURL(blob), opts.filename ?? 'midee.m4a')
-    opts.onProgress?.('Saving', 1)
-    opts.onProgress?.('Done', 1)
   }
 
   private async encodeAudio(

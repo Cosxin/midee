@@ -25,6 +25,7 @@ import {
 // offline-audio module first when audio is needed — do not block Tone on the
 // heavy VideoExporter chunk (see Promise.all removal below).
 import type { VideoExporter } from './export/VideoExporter'
+import { audioBufferToWav } from './export/wav'
 import { setLocale, t } from './i18n'
 import { CaptureFanout } from './midi/CaptureFanout'
 import { ComputerKeyboardInput } from './midi/ComputerKeyboardInput'
@@ -1005,7 +1006,8 @@ export class App {
       }
     }
 
-    const filename = settings.output === 'audio-only' ? 'midee.m4a' : 'midee.mp4'
+    const filename =
+      settings.output === 'audio-only' ? `midee.${settings.audioFormat}` : 'midee.mp4'
 
     try {
       let audioBuffer: AudioBuffer | undefined
@@ -1035,6 +1037,39 @@ export class App {
           trackEvent('export_degraded', { stage: 'audio_render', output: settings.output })
           this.showError(t('error.audio.renderFailed'))
         }
+      }
+
+      // Audio-only ships WAV or MP3 — both are macOS-Gatekeeper-safe legacy audio
+      // types (unlike the MP4-container .m4a this replaced) and need no codec. Trim
+      // the offline render's tail to midi.duration first so the file isn't ~1.5s too
+      // long, then download directly — no VideoExporter. MP3's encoder (lamejs) is
+      // dynamic-imported so it stays out of the initial bundle.
+      if (settings.output === 'audio-only') {
+        if (!audioBuffer) throw new Error('Audio-only export requires a rendered audio buffer')
+        const trimmed = trimAudioBuffer(audioBuffer, midi.duration)
+        let bytes: Uint8Array
+        let mime: string
+        if (settings.audioFormat === 'wav') {
+          bytes = audioBufferToWav(trimmed)
+          mime = 'audio/wav'
+        } else {
+          const { audioBufferToMp3 } = await import('./export/mp3')
+          bytes = audioBufferToMp3(trimmed)
+          mime = 'audio/mpeg'
+        }
+        const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mime }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        exportModal.close()
+        this.showSuccess(`↓ ${t('toast.export.ready', { filename })}`)
+        track('export_completed', {
+          ...exportBase,
+          elapsed_ms: Math.round(performance.now() - exportStartedAt),
+        })
+        return
       }
 
       exportStage = 'video_encode'
@@ -1307,7 +1342,7 @@ export class App {
 
   // Drops the live-session MidiFile into the same play-mode pipeline used by
   // imported .mid files — so it immediately plays back as a rolling piano roll
-  // with MP4/M4A export available.
+  // with MP4 / WAV export available.
   private loadSessionAsFile(midi: import('./core/midi/types').MidiFile): void {
     this.resetInteractionState()
     this.store.beginPlayLoad()

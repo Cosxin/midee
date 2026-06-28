@@ -143,6 +143,7 @@ export const en = {
   'export.title': 'Export MP4',
   'export.sub': 'Frame-accurate · audio baked in · fully offline',
   'export.outputLabel': 'Output',
+  'export.formatLabel': 'Audio format',
   'export.output.av': 'Video + audio',
   'export.output.video': 'Video only',
   'export.output.audio': 'Audio only',

@@ -13,6 +13,9 @@ export type ExportResolution = 'match' | '720p' | '1080p' | '2k' | '4k' | 'verti
 export type ExportOutput = 'av' | 'video-only' | 'audio-only' | 'midi'
 export type ExportFocus = 'fit' | 'all'
 export type ExportSpeed = 'compact' | 'standard' | 'drama'
+// Standalone audio export format. MP3 = compressed (~1/9th of WAV); WAV = lossless.
+// Both are macOS-Gatekeeper-safe (unlike the MP4-container .m4a they replaced).
+export type ExportAudioFormat = 'mp3' | 'wav'
 
 export interface ExportSettings {
   fps: number
@@ -20,6 +23,7 @@ export interface ExportSettings {
   output: ExportOutput
   focus: ExportFocus
   speed: ExportSpeed
+  audioFormat: ExportAudioFormat
 }
 
 // Built lazily inside the view so each `t()` call is reactive — flipping
@@ -87,6 +91,8 @@ interface ViewProps {
   setResolution: (v: ExportResolution) => void
   output: () => ExportOutput
   setOutput: (v: ExportOutput) => void
+  audioFormat: () => ExportAudioFormat
+  setAudioFormat: (v: ExportAudioFormat) => void
   focus: () => ExportFocus
   setFocus: (v: ExportFocus) => void
   speed: () => ExportSpeed
@@ -165,6 +171,30 @@ function ExportView(props: ViewProps) {
                 </button>
               </div>
             </section>
+
+            <Show when={props.output() === 'audio-only'}>
+              <section class="export-section">
+                <span class="export-section-label">{t('export.formatLabel')}</span>
+                <div class="fps-group">
+                  <button
+                    type="button"
+                    class="fps-btn"
+                    classList={{ 'fps-btn--on': props.audioFormat() === 'mp3' }}
+                    onClick={() => props.setAudioFormat('mp3')}
+                  >
+                    MP3
+                  </button>
+                  <button
+                    type="button"
+                    class="fps-btn"
+                    classList={{ 'fps-btn--on': props.audioFormat() === 'wav' }}
+                    onClick={() => props.setAudioFormat('wav')}
+                  >
+                    WAV
+                  </button>
+                </div>
+              </section>
+            </Show>
 
             <section class="export-section" classList={{ 'export-section--disabled': noVideo() }}>
               <span class="export-section-label">{t('export.resolutionLabel')}</span>
@@ -321,6 +351,8 @@ export class ExportModal {
   private readonly readResolution: () => ExportResolution
   private readonly setOutput: (v: ExportOutput) => void
   private readonly readOutput: () => ExportOutput
+  private readonly setAudioFormat: (v: ExportAudioFormat) => void
+  private readonly readAudioFormat: () => ExportAudioFormat
   private readonly setFocus: (v: ExportFocus) => void
   private readonly readFocus: () => ExportFocus
   private readonly setSpeed: (v: ExportSpeed) => void
@@ -348,6 +380,7 @@ export class ExportModal {
     const [fps, setFps] = createSignal(30)
     const [resolution, setResolution] = createSignal<ExportResolution>('1080p')
     const [output, setOutput] = createSignal<ExportOutput>('av')
+    const [audioFormat, setAudioFormat] = createSignal<ExportAudioFormat>('mp3')
     const [focus, setFocus] = createSignal<ExportFocus>('fit')
     const [speed, setSpeed] = createSignal<ExportSpeed>('drama')
     const [stage, setStage] = createSignal(t('export.preparing'))
@@ -364,6 +397,8 @@ export class ExportModal {
     this.readResolution = resolution
     this.setOutput = setOutput
     this.readOutput = output
+    this.setAudioFormat = setAudioFormat
+    this.readAudioFormat = audioFormat
     this.setFocus = setFocus
     this.readFocus = focus
     this.setSpeed = setSpeed
@@ -394,6 +429,8 @@ export class ExportModal {
             this.setOutput(v)
             this.applyResolutionDefaults()
           }}
+          audioFormat={audioFormat}
+          setAudioFormat={(v) => this.setAudioFormat(v)}
           focus={focus}
           setFocus={(v) => this.setFocus(v)}
           speed={speed}
@@ -408,6 +445,7 @@ export class ExportModal {
               fps: this.readFps(),
               resolution: this.readResolution(),
               output: this.readOutput(),
+              audioFormat: this.readAudioFormat(),
               focus: this.readFocus(),
               speed: this.readSpeed(),
             })

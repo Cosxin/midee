@@ -142,6 +142,7 @@ const es: Messages = {
   'export.title': 'Exportar MP4',
   'export.sub': 'Precisión por fotograma · audio integrado · totalmente sin conexión',
   'export.outputLabel': 'Salida',
+  'export.formatLabel': 'Formato de audio',
   'export.output.av': 'Vídeo + audio',
   'export.output.video': 'Solo vídeo',
   'export.output.audio': 'Solo audio',

@@ -142,6 +142,7 @@ const ptBR: Messages = {
   'export.title': 'Exportar MP4',
   'export.sub': 'Precisão por quadro · áudio integrado · totalmente offline',
   'export.outputLabel': 'Saída',
+  'export.formatLabel': 'Formato de áudio',
   'export.output.av': 'Vídeo + áudio',
   'export.output.video': 'Apenas vídeo',
   'export.output.audio': 'Apenas áudio',

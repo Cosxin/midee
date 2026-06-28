@@ -25,6 +25,7 @@
     "bench:update": "VITE_ENABLE_BENCH=1 npx vite build && node scripts/bench.mjs --update"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@fontsource/instrument-serif": "^5.2.8",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",

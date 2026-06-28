@@ -108,29 +108,63 @@ test.describe('MP4 export (flagship, full WebCodecs path)', () => {
     expect(dur!, `mvhd duration ${dur}s should be ≈${FIXTURE_DURATION_S}s`).toBeLessThan(2.5)
   })
 
-  test('audio-only export produces a valid AAC-in-MP4 (.m4a) with an audio track', async ({
+  // NOT gated behind E2E_HEAVY: audio-only ships WAV/MP3 (both pure-JS, no codec),
+  // so they run on GitHub's Linux Chromium too — unlike the AAC/.m4a path replaced.
+  // Both are macOS-Gatekeeper-safe (see src/export/wav.ts, src/export/mp3.ts).
+  test('audio-only WAV export is a valid RIFF file trimmed to the clip length', async ({
     page,
   }) => {
-    // Needs an AAC encoder — absent from GitHub's Linux Chromium (export never
-    // completes there → download timeout). Quarantined to the heavy/local suite.
-    test.skip(!process.env.E2E_HEAVY, 'AAC encode unavailable on CI Chromium — run with E2E_HEAVY=1')
     await loadFixtureAndOpenExport(page)
 
-    // Switch output to "Audio only" — skips all video encoding, fastest path.
+    // Output "Audio only", then pick the WAV format (default is MP3).
     await page.locator('#export-modal .fps-btn', { hasText: 'Audio only' }).click()
+    await page.locator('#export-modal .fps-btn', { hasText: 'WAV' }).click()
 
     const { bytes, suggestedFilename } = await runExportAndCapture(page)
 
-    expect(suggestedFilename).toMatch(/\.m4a$/)
-    expect(bytes.byteLength).toBeGreaterThan(500)
+    expect(suggestedFilename).toMatch(/\.wav$/)
+    expect(bytes.byteLength).toBeGreaterThan(1000)
 
-    const types = parseTopLevelBoxes(bytes).map((b) => b.type)
-    expect(types, `top-level boxes: ${types.join(',')}`).toContain('ftyp')
-    expect(types).toContain('moov')
+    // RIFF/WAVE container with fmt + data chunks.
+    const ascii = (off: number, len: number) =>
+      String.fromCharCode(...bytes.subarray(off, off + len))
+    expect(ascii(0, 4)).toBe('RIFF')
+    expect(ascii(8, 4)).toBe('WAVE')
+    expect(ascii(12, 4)).toBe('fmt ')
+    expect(ascii(36, 4)).toBe('data')
 
-    const handlers = readTrackHandlers(bytes)
-    expect(handlers, `handlers: ${handlers.join(',')}`).toContain('soun')
-    // Audio-only must NOT contain a video track.
-    expect(handlers).not.toContain('vide')
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    expect(dv.getUint16(20, true), 'PCM format').toBe(1)
+    const channels = dv.getUint16(22, true)
+    const sampleRate = dv.getUint32(24, true)
+    const blockAlign = dv.getUint16(32, true)
+    const dataSize = dv.getUint32(40, true)
+    expect(channels).toBeGreaterThan(0)
+    expect(sampleRate).toBeGreaterThan(0)
+    expect(dataSize).toBeGreaterThan(0)
+
+    // Duration from the PCM data must be ≈ clip length (1.95s) — NOT ~3.45s.
+    // This guards BUG-3: the offline render bakes a 1.5s tail that must be trimmed.
+    const durationSec = dataSize / (sampleRate * blockAlign)
+    expect(durationSec, `wav duration ${durationSec}s should be ≈${FIXTURE_DURATION_S}s`).toBeGreaterThan(1.6)
+    expect(durationSec, `wav duration ${durationSec}s should be ≈${FIXTURE_DURATION_S}s`).toBeLessThan(2.5)
+  })
+
+  test('audio-only MP3 export is a valid MP3 (frame sync header)', async ({ page }) => {
+    await loadFixtureAndOpenExport(page)
+
+    // Output "Audio only"; MP3 is the default format, but click it to be explicit.
+    await page.locator('#export-modal .fps-btn', { hasText: 'Audio only' }).click()
+    await page.locator('#export-modal .fps-btn', { hasText: 'MP3' }).click()
+
+    const { bytes, suggestedFilename } = await runExportAndCapture(page)
+
+    expect(suggestedFilename).toMatch(/\.mp3$/)
+    expect(bytes.byteLength).toBeGreaterThan(1000)
+    // MP3 frame sync: byte0 === 0xFF and the top 3 bits of byte1 set (0xE0).
+    expect(bytes[0]).toBe(0xff)
+    expect(bytes[1]! & 0xe0).toBe(0xe0)
+    // Compressed: should be far smaller than the equivalent WAV (~344 KB for ~2s).
+    expect(bytes.byteLength).toBeLessThan(150_000)
   })
 })
