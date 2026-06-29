@@ -1,3 +1,4 @@
+import { createEffect, onCleanup, onMount } from 'solid-js'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
 import type { MidiDeviceStatus } from '../midi/MidiInputManager'
@@ -107,6 +108,54 @@ export function TopStripView(props: TopStripProps) {
     if (m === 'play' || m === 'live' || m === 'learn') return m
     return 'none'
   }
+
+  // Mode-switch thumb. Segments are content-width (labels differ per locale
+  // and inactive labels hide on narrow screens), so the thumb can't use a
+  // static one-third position — we measure the active segment and slide the
+  // thumb to its exact offset/width. offsetLeft/offsetWidth and the thumb's
+  // own offsetLeft all share the same offsetParent (the switch), so their
+  // difference is the precise translation regardless of border/padding.
+  let thumbEl: HTMLSpanElement | undefined
+  const segEls: Partial<Record<'play' | 'live' | 'learn', HTMLButtonElement>> = {}
+
+  // animate=false snaps without a slide — used for the first paint and for
+  // resize/font reflows, where a sliding thumb would look like a glitch.
+  const positionThumb = (animate = true): void => {
+    if (!thumbEl) return
+    const m = activeMode()
+    const seg = m === 'play' || m === 'live' || m === 'learn' ? segEls[m] : undefined
+    if (!seg) {
+      thumbEl.style.opacity = '0'
+      return
+    }
+    if (!animate) thumbEl.style.transition = 'none'
+    thumbEl.style.width = `${seg.offsetWidth}px`
+    thumbEl.style.transform = `translateX(${seg.offsetLeft - thumbEl.offsetLeft}px)`
+    thumbEl.style.opacity = '1'
+    if (!animate) {
+      void thumbEl.offsetWidth // flush the snap before restoring transitions
+      thumbEl.style.transition = ''
+    }
+  }
+
+  // Reposition on mode change (label visibility shifts segment widths too).
+  // First run snaps into place; subsequent mode changes slide.
+  let primed = false
+  createEffect(() => {
+    activeMode()
+    positionThumb(primed)
+    primed = true
+  })
+
+  onMount(() => {
+    // Web-font swap can change label metrics after first paint.
+    if (document.fonts?.ready) void document.fonts.ready.then(() => positionThumb(false))
+    // Breakpoints toggle labels / padding, changing segment widths.
+    const onResize = (): void => positionThumb(false)
+    window.addEventListener('resize', onResize)
+    onCleanup(() => window.removeEventListener('resize', onResize))
+  })
+
   return (
     <div
       id="top-strip"
@@ -141,6 +190,7 @@ export function TopStripView(props: TopStripProps) {
           class="ts-mode-seg"
           classList={{ 'is-active': props.mode() === 'play' }}
           id="ts-mode-play"
+          ref={(el) => (segEls.play = el)}
           type="button"
           role="tab"
           aria-selected={props.mode() === 'play' ? 'true' : 'false'}
@@ -154,6 +204,7 @@ export function TopStripView(props: TopStripProps) {
           class="ts-mode-seg"
           classList={{ 'is-active': props.mode() === 'live' }}
           id="ts-mode-live"
+          ref={(el) => (segEls.live = el)}
           type="button"
           role="tab"
           aria-selected={props.mode() === 'live' ? 'true' : 'false'}
@@ -167,6 +218,7 @@ export function TopStripView(props: TopStripProps) {
           class="ts-mode-seg"
           classList={{ 'is-active': props.mode() === 'learn' }}
           id="ts-mode-learn"
+          ref={(el) => (segEls.learn = el)}
           type="button"
           role="tab"
           aria-selected={props.mode() === 'learn' ? 'true' : 'false'}
@@ -176,7 +228,7 @@ export function TopStripView(props: TopStripProps) {
           <span class="ts-mode-icon" aria-hidden="true" innerHTML={icons.practice()} />
           <span class="ts-mode-label">{t('topStrip.mode.learn.label')}</span>
         </button>
-        <span class="ts-mode-thumb" aria-hidden="true" />
+        <span class="ts-mode-thumb" aria-hidden="true" ref={(el) => (thumbEl = el)} />
       </div>
 
       <div class="ts-status" id="ts-status" aria-live="polite">
@@ -210,6 +262,11 @@ export function TopStripView(props: TopStripProps) {
           <span innerHTML={icons.upload()} />
           <span>{t('home.cta.openMidi')}</span>
         </button>
+        {/* Appearance/Customize is pinned near the start of the right cluster
+            so the strip's right-edge overflow (the grid never shrinks .ts-end —
+            see #top-strip in main.css) clips the contextual pills (export,
+            MIDI, tracks) before it ever reaches Appearance. */}
+        <span id="ts-customize-slot" />
         <button
           ref={(el) => props.registerTracksBtn(el)}
           class="ts-pill ts-pill--file"
@@ -256,7 +313,6 @@ export function TopStripView(props: TopStripProps) {
             {props.midiPillLabel()}
           </span>
         </button>
-        <span id="ts-customize-slot" />
         <button
           class="ts-record-btn"
           classList={{

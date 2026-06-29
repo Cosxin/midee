@@ -4,6 +4,7 @@ import { LOCALES, type LocaleCode, locale, t } from '../i18n'
 import type { ParticleStyle, ParticleStyleInfo } from '../renderer/ParticleSystem'
 import type { Theme } from '../renderer/theme'
 import { trackEvent } from '../telemetry'
+import { icons } from './icons'
 import { FEEDBACK_URL, isNarrowViewport } from './utils'
 
 // Aesthetics popover — collapses theme, particles, and chord overlay (three
@@ -23,7 +24,7 @@ export interface CustomizeMenuCallbacks {
 
 interface TriggerProps {
   label: () => string
-  swatchStyle: () => { background: string; 'box-shadow': string }
+  accent: () => string
   isOpen: () => boolean
   onToggle: () => void
   registerEl: (el: HTMLButtonElement) => void
@@ -42,10 +43,11 @@ function TriggerView(props: TriggerProps) {
       onClick={() => props.onToggle()}
     >
       <span
-        class="ts-customize-swatch"
-        id="ts-customize-swatch"
+        class="ts-customize-icon"
+        id="ts-customize-icon"
         aria-hidden="true"
-        style={props.swatchStyle()}
+        style={{ color: props.accent() }}
+        innerHTML={icons.palette(16)}
       />
       <span class="ts-customize-label" id="ts-customize-label">
         {props.label()}
@@ -255,7 +257,7 @@ export class CustomizeMenu {
   private readonly setIsOpen: (v: boolean) => void
   private readonly setIsSheet: (v: boolean) => void
   private readonly setLabel: (v: string) => void
-  private readonly setSwatch: (v: { background: string; 'box-shadow': string }) => void
+  private readonly setAccent: (v: string) => void
 
   private onDocPointer = (e: PointerEvent): void => {
     const target = e.target as Node
@@ -288,7 +290,7 @@ export class CustomizeMenu {
     const [isOpen, setIsOpen] = createSignal(false)
     const [isSheet, setIsSheet] = createSignal(false)
     const [label, setLabel] = createSignal(t('customize.theme'))
-    const [swatch, setSwatch] = createSignal({ background: '', 'box-shadow': '' })
+    const [accent, setAccent] = createSignal('var(--accent)')
 
     this.themeIdxFn = themeIdx
     this.setThemeIdx = setThemeIdx
@@ -299,7 +301,7 @@ export class CustomizeMenu {
     this.setIsOpen = setIsOpen
     this.setIsSheet = setIsSheet
     this.setLabel = setLabel
-    this.setSwatch = setSwatch
+    this.setAccent = setAccent
 
     // Trigger: render into its own wrapper so the host gets exactly our pill
     // and nothing else. We capture the button ref so existing callers can
@@ -312,7 +314,7 @@ export class CustomizeMenu {
       () => (
         <TriggerView
           label={label}
-          swatchStyle={swatch}
+          accent={accent}
           isOpen={isOpen}
           onToggle={() => this.toggle()}
           registerEl={(el) => {
@@ -355,12 +357,9 @@ export class CustomizeMenu {
     this.setThemeIdx(index)
     const theme = this.themes[index]
     if (!theme) return
-    const accent = theme.uiAccentCSS
-    const second = numToHexCss(theme.trackColors[2] ?? theme.trackColors[0] ?? 0xffffff)
-    this.setSwatch({
-      background: `linear-gradient(135deg, ${accent}, ${second})`,
-      'box-shadow': `0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 0 12px ${accent}55`,
-    })
+    // Tint the palette glyph with the active theme accent — keeps the live
+    // "current theme" signal the old colour swatch carried.
+    this.setAccent(theme.uiAccentCSS)
     this.setLabel(theme.name)
   }
 
@@ -443,11 +442,6 @@ export class CustomizeMenu {
 
 // Kept for call sites that still import the ParticleStyle type by name.
 export type { ParticleStyle }
-
-function numToHexCss(n: number): string {
-  const hex = (n & 0xffffff).toString(16).padStart(6, '0')
-  return `#${hex}`
-}
 
 // Lightweight inline SVGs that hint at each particle style's behaviour.
 // All use currentColor so they pick up theme accent on hover / when active.

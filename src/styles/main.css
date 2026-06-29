@@ -902,19 +902,25 @@ body {
    their labels would clip the centered Now-Playing title. The decision is
    content-driven (not a fixed width breakpoint): Controls runs a ResizeObserver
    that toggles `.ts-compact` on #top-strip when the title clips — see
-   Controls.evaluateCompact(). Export, the instrument selector, MIDI, and the
-   mode switch always keep their labels; the full title is available via the
-   native hover tooltip. Label span is the SECOND child (`> span + span`);
-   the first child holds the icon SVG and stays. */
+   Controls.evaluateCompact(). Every label collapses (export and MIDI included)
+   so the cluster fits in more cases and the strip stops overflowing its right
+   edge — which otherwise clips the right-most pills off-screen. Appearance is
+   pinned left-of-cluster (see ControlsView ts-customize-slot) so it survives
+   even when the row still overflows. The instrument selector and mode switch
+   keep their labels; the full title is available via the native hover tooltip.
+   Label span is the SECOND child (`> span + span`); the first holds the icon. */
 #top-strip.ts-compact #ts-open > span + span,
 #top-strip.ts-compact #ts-tracks > span + span,
 #top-strip.ts-compact #ts-learn-this > span + span,
+#top-strip.ts-compact #ts-record > span + span,
+#top-strip.ts-compact .ts-midi-label,
 #top-strip.ts-compact .ts-customize-label {
   display: none;
 }
 #top-strip.ts-compact #ts-open,
 #top-strip.ts-compact #ts-tracks,
-#top-strip.ts-compact #ts-learn-this {
+#top-strip.ts-compact #ts-learn-this,
+#top-strip.ts-compact #ts-record {
   padding: 0 10px;
   gap: 0;
 }
@@ -967,6 +973,10 @@ body {
    hides so both segments read as available. */
 .ts-mode-switch {
   position: relative;
+  /* Segments size to their own label (content width), so the switch stays
+     compact and reads naturally in every locale. The sliding thumb can't use
+     static thirds then — its width + offset are measured from the active
+     segment in JS (see positionModeThumb in ControlsView). */
   display: inline-flex;
   align-items: center;
   height: 32px;
@@ -1041,11 +1051,13 @@ body {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  left: 3px;
-  /* Three segments now (Play / Live / Learn). The thumb is one-third of the
-     available width (minus the 3px left inset that applies only once). Each
-     active state translates by a full segment width. */
-  width: calc((100% - 6px) / 3);
+  /* width + translateX are set in JS to match the active segment's measured
+     size/offset (segments are content-width, not equal thirds). Defaults here
+     are just a pre-measure resting state. The `left` origin is 0 because the
+     measured offsetLeft already includes the track's 3px padding. */
+  left: 0;
+  width: 0;
+  transform: translateX(3px);
   border-radius: var(--r-pill);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.08));
   box-shadow:
@@ -1056,22 +1068,8 @@ body {
   pointer-events: none;
   transition:
     transform 0.26s var(--ease-spring),
+    width 0.26s var(--ease-spring),
     opacity 0.18s var(--ease-out);
-}
-
-.ts-mode-switch[data-active="play"] .ts-mode-thumb {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.ts-mode-switch[data-active="live"] .ts-mode-thumb {
-  opacity: 1;
-  transform: translateX(100%);
-}
-
-.ts-mode-switch[data-active="learn"] .ts-mode-thumb {
-  opacity: 1;
-  transform: translateX(200%);
 }
 
 /* ─────────────────────────────────────────
@@ -6682,23 +6680,20 @@ body.canvas-hidden #kbd-resizer {
   background: color-mix(in srgb, var(--accent) 8%, rgba(255, 255, 255, 0.04));
 }
 
-.ts-customize-swatch {
+.ts-customize-icon {
   position: relative;
   z-index: 1;
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  background: var(--accent);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
-    0 0 12px var(--accent-glow);
-  transition:
-    transform 0.2s var(--ease-spring),
-    box-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* `color` is set inline to the active theme accent (palette glyph uses
+     currentColor), so the trigger still reflects the current theme. */
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+  transition: transform 0.2s var(--ease-spring);
 }
 
-.ts-pill--customize:hover .ts-customize-swatch {
-  transform: rotate(-6deg) scale(1.04);
+.ts-pill--customize:hover .ts-customize-icon {
+  transform: rotate(-6deg) scale(1.06);
 }
 
 .ts-customize-label {
@@ -6734,6 +6729,10 @@ body.canvas-hidden #kbd-resizer {
    padding and hierarchy → consistent across the topbar. */
 .ts-customize-menu {
   width: 300px;
+  /* This menu is content-dense (theme grid + particles + chord + language +
+     feedback), so give it more vertical room than the shared .ts-popover cap
+     (min(60vh, 520px)) before the body starts scrolling. */
+  max-height: min(82vh, 720px);
   padding: 0;
   display: flex;
   flex-direction: column;
