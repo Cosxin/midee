@@ -66,6 +66,13 @@ const SUSTAIN_CADENCE: EmitCadence = {
   intervalSec: SUSTAIN_INTERVAL_SEC,
 }
 
+// Consecutive non-animating ticks rendered before the ticker stops itself.
+// The grace window absorbs bursts (scrub gestures, rapid note on/off) so we
+// don't thrash stop/start, and guarantees the final state is presented before
+// the loop goes quiet. ~0.25 s at 120 Hz, ~0.5 s at 60 Hz — the render work in
+// that window is negligible next to an always-on loop.
+const IDLE_GRACE_FRAMES = 30
+
 export class PianoRollRenderer {
   private app!: Application
   private viewport!: Viewport
@@ -124,6 +131,13 @@ export class PianoRollRenderer {
   // in Learn where the scheduled MIDI is what matters and user presses
   // should only manifest as a keyboard-key highlight.
   private liveNotesVisible = true
+
+  // Idle-stop bookkeeping (see onTick). Unsub closures for the wake
+  // subscriptions on the clock and the live/loop note stores.
+  private idleFrames = 0
+  private clockUnsub: (() => void) | null = null
+  private liveStoreUnsub: (() => void) | null = null
+  private loopStoreUnsub: (() => void) | null = null
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -276,11 +290,14 @@ export class PianoRollRenderer {
   setTrackVisible(trackId: string, visible: boolean): void {
     if (visible) this.visibleTrackIds.add(trackId)
     else this.visibleTrackIds.delete(trackId)
+    // Repaint immediately — with the idle-stopped ticker there is no "next
+    // frame" to pick the change up while paused.
+    this.presentFrame()
   }
 
   setPracticeTrackFocus(trackIds: Iterable<string> | null): void {
     this.practiceFocusTrackIds = trackIds ? new Set(trackIds) : null
-    if (this.midi) this.renderStaticFrame(this.lastRenderTime)
+    if (this.midi) this.presentFrame()
   }
 
   setZoom(pixelsPerSecond: number): void {
@@ -290,6 +307,7 @@ export class PianoRollRenderer {
     // may cache timeOffsetToY-derived positions though, so notify them.
     this.viewport.update({ pixelsPerSecond })
     this.rebuildExternalLayers()
+    this.presentFrame()
   }
 
   // Narrows or widens the visible pitch range. Used during vertical/square
@@ -318,7 +336,7 @@ export class PianoRollRenderer {
     this.viewport.update({ keyboardHeight: clamped })
     document.documentElement.style.setProperty('--keyboard-h', `${clamped}px`)
     this.rebuildStaticLayers()
-    this.renderStaticFrame(0)
+    this.presentFrame()
   }
 
   get currentKeyboardHeight(): number {
@@ -338,7 +356,7 @@ export class PianoRollRenderer {
     // Particle motion is intentionally theme-independent — only the color
     // changes (via the caller's trackColors[0]). Behaviour stays consistent.
     this.rebuildStaticLayers()
-    this.renderStaticFrame(0)
+    this.presentFrame()
   }
 
   // Public reads of renderer internals for Learn-mode overlays that compute
@@ -353,6 +371,20 @@ export class PianoRollRenderer {
 
   attachClock(clock: MasterClock): void {
     this.app.ticker.add(this.onTick.bind(this, clock))
+    // Every clock emission is a wake signal: play() ticks at frame rate, and
+    // seek() emits synchronously even while paused — so scrubbing a paused
+    // piece restarts the (possibly idle-stopped) ticker and repaints at the
+    // new position before the loop idles out again.
+    this.clockUnsub = clock.subscribe(() => this.wake())
+  }
+
+  // Restart the render loop after an idle stop. No-op while exporting —
+  // the exporter owns the ticker via pauseAutoRender/resumeAutoRender and
+  // drives frames manually.
+  wake(): void {
+    if (this.exportMode) return
+    this.idleFrames = 0
+    if (!this.app.ticker.started) this.app.ticker.start()
   }
 
   private onTick(clock: MasterClock, ticker: Ticker): void {
@@ -360,13 +392,31 @@ export class PianoRollRenderer {
     const hasLive =
       (this.liveNoteStore?.hasRenderableNotes ?? false) ||
       (this.loopNoteStore?.hasRenderableNotes ?? false)
-    // Skip the render pass only when there is genuinely nothing to draw.
-    // An external layer registered via `addLayer` may want a per-frame
-    // update (animated target zone, countdown bar, staff cursor) even when
-    // no MIDI or live notes are active — gating that out would freeze learn
-    // overlays on the hub screen.
-    if (!this.midi && !hasLive && this.externalLayers.length === 0) return
-    this.renderFrame(clock.currentTime, ticker.deltaMS / 1000, clock.playing)
+    // Anything that changes frame-to-frame without an external event: a
+    // running clock (notes scroll), live/loop note trails (rise and decay),
+    // in-flight particles, or external layers. Layers count as always
+    // animating — Learn overlays run per-frame countdowns/celebrations even
+    // on the hub screen, so Learn mode never idle-stops (same as before).
+    const animating =
+      clock.playing || hasLive || this.particles.hasActive || this.externalLayers.length > 0
+    if (animating) {
+      this.idleFrames = 0
+      this.renderFrame(clock.currentTime, ticker.deltaMS / 1000, clock.playing)
+      return
+    }
+    // Static scene. Render through a short grace window so the settled state
+    // is definitely presented, then stop the ticker entirely — a static
+    // screen otherwise redraws identical pixels at display refresh rate
+    // (~170 ms/s main-thread on a 120 Hz laptop; see
+    // docs/IDLE_RENDER_LOOP_2026-07-02.md). Every mutation path either calls
+    // wake() (clock emits, live-note store changes, layer adds) or presents
+    // a frame manually (presentFrame / renderStaticFrame call sites).
+    if (this.idleFrames < IDLE_GRACE_FRAMES) {
+      this.idleFrames++
+      if (this.midi) this.renderFrame(clock.currentTime, ticker.deltaMS / 1000, false)
+      return
+    }
+    this.app.ticker.stop()
   }
 
   // Drives rendering during video export. `emitParticles: true` so note-on
@@ -382,6 +432,15 @@ export class PianoRollRenderer {
   renderStaticFrame(currentTime: number): void {
     this.renderFrame(currentTime, 0, false)
     this.app.renderer.render(this.app.stage)
+  }
+
+  // Re-present the scene at the last rendered playhead position. This is the
+  // correct one-shot repaint for mutations that don't move time (zoom, theme,
+  // resize, track visibility): rendering at t=0 instead only *looked* right
+  // historically because the always-on ticker repainted at clock time one
+  // frame later — with the idle-stopped ticker, a t=0 frame would stick.
+  private presentFrame(): void {
+    this.renderStaticFrame(this.lastRenderTime)
   }
 
   private renderFrame(currentTime: number, dt: number, emitParticles: boolean): void {
@@ -569,9 +628,11 @@ export class PianoRollRenderer {
     this.externalLayers.push(layer)
     this.externalLayers.sort((a, b) => a.zIndex - b.zIndex)
     layer.rebuild?.(this.makeLayerCtx(0))
-    // Re-present so a layer added while the clock is paused paints immediately
-    // instead of waiting for the next tick (which may never come in home mode).
-    this.renderStaticFrame(0)
+    // Re-present so a layer added while the clock is paused paints immediately,
+    // and wake the ticker — layers animate per frame, so their presence keeps
+    // the loop out of idle-stop until they're removed.
+    this.presentFrame()
+    this.wake()
   }
 
   removeLayer(layer: RenderLayer): void {
@@ -579,7 +640,7 @@ export class PianoRollRenderer {
     if (i < 0) return
     this.externalLayers.splice(i, 1)
     layer.unmount()
-    this.renderStaticFrame(0)
+    this.presentFrame()
   }
 
   private makeLayerCtx(time: number): RenderContext {
@@ -597,10 +658,17 @@ export class PianoRollRenderer {
     const cx = this.viewport.pitchToX(pitch) + w / 2
     const color = this.theme.trackColors[0] ?? this.theme.nowLine
     this.particles.burst(cx, this.viewport.nowLineY, color, w)
+    // Particles animate over the next ~1 s — make sure the loop is running.
+    this.wake()
   }
 
   setLiveNoteStore(store: LiveNoteStore): void {
+    this.liveStoreUnsub?.()
     this.liveNoteStore = store
+    // A press/release/reset can arrive while the ticker is idle-stopped
+    // (e.g. first key tap on the home screen) — wake so the next frame
+    // draws it, and so trails/particles keep animating afterwards.
+    this.liveStoreUnsub = store.onChange(() => this.wake())
   }
 
   // Suppress (or restore) the upward-floating live-note sprites without
@@ -611,6 +679,7 @@ export class PianoRollRenderer {
     if (this.liveNotesVisible === visible) return
     this.liveNotesVisible = visible
     if (!visible) this.liveNoteRenderer.clear()
+    this.presentFrame()
   }
 
   // Hide/show the entire stage. Skips per-frame draw work (stage.visible=false
@@ -622,10 +691,16 @@ export class PianoRollRenderer {
     this.app.stage.visible = visible
     this.app.canvas.style.visibility = visible ? '' : 'hidden'
     document.body.classList.toggle('canvas-hidden', !visible)
+    // Coming back from hidden (sheet-music exercise → roll), the ticker may
+    // be idle-stopped with a stale backbuffer — present the current state.
+    if (visible) this.presentFrame()
   }
 
   setLoopNoteStore(store: LiveNoteStore | null): void {
+    this.loopStoreUnsub?.()
+    this.loopStoreUnsub = null
     this.loopNoteStore = store
+    if (store) this.loopStoreUnsub = store.onChange(() => this.wake())
   }
 
   // Pitch → track color map of every key currently lit on the on-screen
@@ -649,10 +724,10 @@ export class PianoRollRenderer {
       this.practiceHintAccepted,
       this.theme,
     )
-    if (!this.midi && !(this.liveNoteStore?.hasRenderableNotes ?? false)) {
-      // No render loop is running — paint once so the hint appears immediately.
-      this.renderStaticFrame(0)
-    }
+    // Paint once so the hint appears immediately — the ticker may be
+    // idle-stopped (paused practice step), so there is no next tick to
+    // rely on. Cheap and unconditional beats guessing the loop's state.
+    this.presentFrame()
   }
 
   isTrackVisible(trackId: string): boolean {
@@ -670,7 +745,9 @@ export class PianoRollRenderer {
 
   resumeAutoRender(): void {
     this.exportMode = false
-    this.app.ticker.start()
+    // wake() rather than a bare ticker.start() so the idle countdown also
+    // resets — the post-export scene then presents and idles out normally.
+    this.wake()
   }
 
   get canvas(): HTMLCanvasElement {
@@ -703,7 +780,11 @@ export class PianoRollRenderer {
     this.app.renderer.resize(width, height)
     this.viewport.update({ canvasWidth: width, canvasHeight: height })
     this.rebuildStaticLayers()
-    this.renderStaticFrame(0)
+    // Present at the *current* playhead, not t=0 — a window resize while
+    // paused mid-piece must not repaint the piece's start. (Under the old
+    // always-on ticker the t=0 frame was overwritten a frame later; now it
+    // would stick.)
+    this.presentFrame()
   }
 
   private handleResize = (): void => {
@@ -720,6 +801,9 @@ export class PianoRollRenderer {
 
   destroy(): void {
     window.removeEventListener('resize', this.handleResize)
+    this.clockUnsub?.()
+    this.liveStoreUnsub?.()
+    this.loopStoreUnsub?.()
     this.app.destroy()
   }
 }

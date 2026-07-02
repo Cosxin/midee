@@ -493,6 +493,12 @@ export class App {
 
     this.unsubs.push(
       this.clock.subscribe((t) => {
+        // Export drives this same clock via seek() at frame cadence — those
+        // emissions are the encoder sweeping the timeline, not the user
+        // watching. Without this gate a load→export flow logs the 30/60/120s
+        // milestones (and the playback_30s activation) for a piece nobody
+        // played back.
+        if (this.store.state.status === 'exporting') return
         // Engagement milestones are mode-agnostic (watched ≥30s counts as
         // a real user regardless of where the clock was ticking).
         for (const m of [30, 60, 120]) {
@@ -843,6 +849,11 @@ export class App {
         fileSizeKb: Math.round(file.size / 1024),
       })
       if (previousMode === 'play' && previousMidi) {
+        // Manual surface restore — the one place that can't lean on
+        // <PlayMode/>'s effect: `loadedMidi` still holds the same
+        // `previousMidi` reference (beginPlayLoad doesn't clear it), so the
+        // effect never re-fires, yet clearMidi() above already wiped the
+        // renderer.
         this.store.enterPlay()
         this.renderer.loadMidi(previousMidi)
         this.trackPanel.render(previousMidi)
@@ -969,6 +980,12 @@ export class App {
     this.synth.liveReleaseAll()
     this.store.setState('status', 'exporting')
     this.synth.pause()
+    // The metronome schedules clicks on its own look-ahead timer against the
+    // *global* Tone context — left running, it would keep scheduling straight
+    // through OfflineAudioRenderer's setContext() swap into the offline
+    // render. Stop it for the duration; restored in the finally below.
+    const metronomeWasRunning = this.metronome.running.value
+    this.metronome.stop()
     this.renderer.pauseAutoRender()
 
     const needsVideo = settings.output !== 'audio-only'
@@ -1122,6 +1139,7 @@ export class App {
       if (ppsChanged) this.renderer.setZoom(originalPps)
       this.renderer.resumeAutoRender()
       this.clock.seek(resumeAt)
+      if (metronomeWasRunning) this.metronome.start()
       this.store.setState('status', 'ready')
       if (wasPlaying) {
         this.clock.play()
@@ -1342,19 +1360,17 @@ export class App {
 
   // Drops the live-session MidiFile into the same play-mode pipeline used by
   // imported .mid files — so it immediately plays back as a rolling piano roll
-  // with MP4 / WAV export available.
+  // with MP4 / WAV export available. Same contract as loadMidi(): after
+  // completePlayLoad, <PlayMode/>'s effect owns the surface side effects
+  // (renderer.loadMidi, trackPanel.render, dropzone.hide,
+  // keyboardInput.enable, document.title) — don't repeat them here.
   private loadSessionAsFile(midi: import('./core/midi/types').MidiFile): void {
     this.resetInteractionState()
     this.store.beginPlayLoad()
     this.renderer.clearMidi()
     this.synth.load(midi).catch((err) => console.error('SynthEngine.load failed:', err))
     this.store.completePlayLoad(midi)
-    // Typing keyboard stays on — users can play along with their own session.
-    this.keyboardInput.enable()
-    this.renderer.loadMidi(midi)
-    this.trackPanel.render(midi)
-    this.dropzone.hide()
-    document.title = `${midi.name} · midee`
+    this.resetPlaybackTelemetry()
   }
 
   private async saveLoopAsMidi(): Promise<void> {
@@ -1387,8 +1403,11 @@ export class App {
     track('chord_overlay_toggled', { on: this.chordOverlayOn })
     if (this.chordOverlayOn && this.chordOverlay.isVisible) {
       // Force a fresh reading on toggle-on so the user sees a chord (or "—")
-      // immediately, even if the clock isn't ticking right now.
-      this.chordLastSig = ''
+      // immediately, even if the clock isn't ticking right now. Only the
+      // throttle timestamp is reset — chordLastSig must stay in lockstep
+      // with the overlay's displayed reading (see maybeUpdateChordOverlay),
+      // so if the held pitches changed while the overlay was off this call
+      // sees a signature mismatch and repaints.
       this.chordLastRunMs = 0
       this.maybeUpdateChordOverlay(this.clock.currentTime)
     }
@@ -1403,21 +1422,27 @@ export class App {
   }
 
   // Builds the active-pitch set from the right sources for the current mode,
-  // detects a chord, and pushes it to the overlay. Throttled to ~70ms because
-  // chords don't change at 60 fps and the per-frame cost on long files is
-  // wasted otherwise.
+  // detects a chord, and pushes it to the overlay. Gated on the overlay being
+  // *visible* — not just the saved preference — because in play mode (where
+  // the overlay never shows) collectActivePitches scans every elapsed note,
+  // and the preference defaults to on for everyone. The whole body sits
+  // behind the ~70ms throttle for the same reason: chords don't change at
+  // 60 fps, so the worst-case readout latency is imperceptible while the
+  // per-tick scan is not free on long files.
+  //
+  // Invariant: `chordLastSig` always matches what the overlay displays —
+  // they are only ever written together below. Callers must not reset the
+  // signature independently or a skipped update leaves a stale reading.
   private maybeUpdateChordOverlay(time: number): void {
-    if (!this.chordOverlayOn) return
+    if (!this.chordOverlayOn || !this.chordOverlay.isVisible) return
     const now = performance.now()
+    if (now - this.chordLastRunMs < 70) return
+    this.chordLastRunMs = now
     const pitches = this.collectActivePitches(time)
     const sig = pitchSignature(pitches)
-    if (sig === this.chordLastSig && now - this.chordLastRunMs < 250) return
-    if (sig !== this.chordLastSig || now - this.chordLastRunMs >= 70) {
-      this.chordLastSig = sig
-      this.chordLastRunMs = now
-      const reading = detectChord(pitches)
-      this.chordOverlay.update(reading)
-    }
+    if (sig === this.chordLastSig) return
+    this.chordLastSig = sig
+    this.chordOverlay.update(detectChord(pitches))
   }
 
   private collectActivePitches(currentTime: number): Set<number> {

@@ -186,6 +186,12 @@ export class ParticleSystem {
 
   private pool: Particle[] = []
   private active: Particle[] = []
+
+  // True while any particle is mid-flight. The renderer's idle detector keeps
+  // the ticker alive until the last burst decays, then stops rendering.
+  get hasActive(): boolean {
+    return this.active.length > 0
+  }
   private texture: Texture | null = null
   private style: ParticleStyle = 'sparks'
   // Wind always blows to the right — a gentle consistent breeze. Kept as a

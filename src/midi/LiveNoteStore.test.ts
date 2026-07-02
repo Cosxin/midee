@@ -136,4 +136,56 @@ describe('LiveNoteStore', () => {
     expect(store.heldNotes.size).toBe(0)
     expect(store.releasedNotes).toHaveLength(0)
   })
+
+  // onChange is the renderer's wake signal: it must fire on every mutation
+  // that changes renderable content (press/release/reset) so the idle-stopped
+  // ticker restarts, and must stay silent for pruneInvisible, which runs
+  // *inside* the render loop and would otherwise self-wake forever.
+  describe('onChange', () => {
+    it('notifies on press, release, and reset — not on no-op release', () => {
+      const store = new LiveNoteStore()
+      let fired = 0
+      store.onChange(() => fired++)
+
+      store.press(60, 0.8, 1)
+      expect(fired).toBe(1)
+      store.release(60, 2)
+      expect(fired).toBe(2)
+      store.release(60, 3) // pitch not held — nothing changed
+      expect(fired).toBe(2)
+      store.reset()
+      expect(fired).toBe(3)
+    })
+
+    it('releaseAll notifies once per held note', () => {
+      const store = new LiveNoteStore()
+      store.press(60, 0.8, 1)
+      store.press(64, 0.8, 1)
+      let fired = 0
+      store.onChange(() => fired++)
+      store.releaseAll(2)
+      expect(fired).toBe(2)
+    })
+
+    it('pruneInvisible is silent', () => {
+      const store = new LiveNoteStore()
+      store.press(60, 0.8, 0)
+      store.release(60, 1)
+      let fired = 0
+      store.onChange(() => fired++)
+      store.pruneInvisible(1000, 0.001)
+      expect(store.releasedNotes).toHaveLength(0)
+      expect(fired).toBe(0)
+    })
+
+    it('unsubscribe stops notifications', () => {
+      const store = new LiveNoteStore()
+      let fired = 0
+      const off = store.onChange(() => fired++)
+      store.press(60, 0.8, 1)
+      off()
+      store.press(64, 0.8, 1)
+      expect(fired).toBe(1)
+    })
+  })
 })
