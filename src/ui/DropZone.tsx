@@ -197,7 +197,7 @@ function DropZoneView(props: DropZoneProps) {
             innerHTML={icons.github()}
           />
           <a
-            href="https://discord.gg/7As2NHHd"
+            href="https://discord.gg/UaH5qWSNdy"
             class="home-meta-link"
             aria-label={t('home.metaLink.discord')}
             data-tip={t('home.metaLink.discord')}
