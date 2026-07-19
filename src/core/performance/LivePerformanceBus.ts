@@ -52,11 +52,17 @@ export function createLivePerformanceBus(): LivePerformanceBus {
     midi: false,
     keyboard: false,
     touch: false,
+    pi: false,
   }
   const sustainedPitches = new Set<number>()
 
   function recomputePedal(): boolean {
-    return pedalSourceDown.midi || pedalSourceDown.keyboard || pedalSourceDown.touch
+    return (
+      pedalSourceDown.midi ||
+      pedalSourceDown.keyboard ||
+      pedalSourceDown.touch ||
+      pedalSourceDown.pi
+    )
   }
 
   return {

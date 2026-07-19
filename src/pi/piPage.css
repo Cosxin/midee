@@ -1,0 +1,168 @@
+.led-strip-harness {
+  position: fixed;
+  z-index: 65;
+  top: 76px;
+  right: 12px;
+  left: 12px;
+  padding: 8px 10px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: 12px;
+  background: rgba(6, 7, 16, 0.92);
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.led-strip-harness__bar,
+.led-strip-harness__title,
+.led-strip-harness__legend,
+.led-strip-harness__connection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.led-strip-harness__bar {
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.led-strip-harness__title strong {
+  font: 600 11px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.led-strip-harness__status,
+.led-strip-harness__mismatch,
+.led-strip-harness__song {
+  color: var(--text-dim);
+  font: 500 9px var(--font-mono);
+}
+.led-strip-harness__status.is-connected {
+  color: #6ee7b7;
+}
+.led-strip-harness__status.is-error,
+.led-strip-harness__mismatch {
+  color: #fca5a5;
+}
+.led-strip-harness__legend {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+.led-strip-harness__legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.led-strip-harness__legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #293047;
+}
+.led-strip-harness__legend .is-expected {
+  background: #67e8f9;
+  box-shadow: 0 0 7px #22d3ee;
+}
+.led-strip-harness__legend .is-actual {
+  background: #a78bfa;
+  box-shadow: 0 0 7px #8b5cf6;
+}
+.led-strip-harness__legend .is-aux {
+  border: 1px solid #f97316;
+  background: transparent;
+  box-shadow: none;
+}
+
+.led-strip-harness button,
+.led-strip-harness input {
+  border: 1px solid var(--border-hi);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: 500 9px var(--font);
+}
+.led-strip-harness button {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.led-strip-harness input {
+  min-width: 260px;
+  padding: 5px 8px;
+}
+.led-strip-harness__connection {
+  margin: 2px 0 7px;
+}
+
+.led-strip-harness__row,
+.led-strip-harness__ticks {
+  display: grid;
+  grid-template-columns: 25px repeat(100, minmax(3px, 1fr));
+  align-items: center;
+  gap: 2px;
+}
+.led-strip-harness__row + .led-strip-harness__row {
+  margin-top: 3px;
+}
+.led-strip-harness__row-label {
+  color: var(--text-dim);
+  font: 600 8px var(--font-mono);
+}
+.led-strip-dot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 3px;
+  max-width: 10px;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 50% !important;
+  background: #1b2031 !important;
+}
+.led-strip-dot.is-aux {
+  border-color: rgba(249, 115, 22, 0.5) !important;
+}
+.led-strip-dot--expected.is-on {
+  border-color: #a5f3fc !important;
+  background: #67e8f9 !important;
+  box-shadow:
+    0 0 5px #22d3ee,
+    0 0 11px rgba(34, 211, 238, 0.75);
+}
+.led-strip-dot--actual.is-on {
+  border-color: #ddd6fe !important;
+  background: #a78bfa !important;
+  box-shadow:
+    0 0 5px #8b5cf6,
+    0 0 11px rgba(139, 92, 246, 0.75);
+}
+.led-strip-dot.is-mismatch {
+  outline: 1px solid #ef4444;
+  outline-offset: 1px;
+}
+.led-strip-harness__ticks {
+  margin-top: 1px;
+}
+.led-strip-harness__ticks span {
+  color: #4f5678;
+  font: 400 6px var(--font-mono);
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  .led-strip-harness__legend {
+    display: none;
+  }
+  .led-strip-harness {
+    right: 6px;
+    left: 6px;
+  }
+  .led-strip-harness__row,
+  .led-strip-harness__ticks {
+    gap: 1px;
+    grid-template-columns: 20px repeat(100, minmax(1px, 1fr));
+  }
+  .led-strip-harness input {
+    min-width: 0;
+    flex: 1;
+  }
+}
