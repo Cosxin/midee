@@ -69,21 +69,48 @@ mapping errors can be seen immediately.
 
 ### Data flow
 
-```text
-MIDI file or live audio
-        |
-        v
-Raspberry Pi decoder / audio-to-MIDI inference
-        |
-        v
-MIDI note 21-108 + velocity 0-127
-        |
-        v
-LED mapping + WebSocket bridge (:8765/leds)
-        |
-        v
-Midee ?pi=1 visualization
+```mermaid
+flowchart LR
+    Phone["Phone<br/>music playback"]
+
+    subgraph Pi["Raspberry Pi"]
+        Bluetooth["BlueZ<br/>A2DP + AVRCP"]
+        Audio["PipeWire<br/>16 kHz PCM capture"]
+        Model["Onsets & Velocities<br/>piano transcription"]
+        Events["MIDI note 21-108<br/>velocity 0-127"]
+        Mapping["Piano mapping<br/>LED = note - 21"]
+        Driver["rpi-ws281x controller<br/>(target hardware path)"]
+        Socket["WebSocket bridge<br/>port 8765"]
+    end
+
+    Strip["WS2812B LED strip<br/>88 piano keys"]
+    Midee["Midee ?pi=1<br/>verification harness"]
+
+    Phone -->|"Bluetooth audio"| Bluetooth
+    Bluetooth --> Audio
+    Audio --> Model
+    Model --> Events
+    Events --> Mapping
+    Mapping --> Driver
+    Driver --> Strip
+    Mapping --> Socket
+    Socket -->|"note state + velocity"| Midee
+    Midee -.->|"start / pause / resume / stop"| Bluetooth
+    Bluetooth -.->|"AVRCP"| Phone
+
+    classDef source fill:#e8f1ff,stroke:#3973c6,color:#13243a
+    classDef pi fill:#f3ebff,stroke:#8451bd,color:#271936
+    classDef output fill:#e7f8ec,stroke:#3b9254,color:#17351f
+    class Phone source
+    class Bluetooth,Audio,Model,Events,Mapping,Driver,Socket pi
+    class Strip,Midee output
 ```
+
+The solid path is the intended phone-to-physical-LED pipeline. The WebSocket
+branch drives the Midee harness with the same mapped notes, allowing the
+inference and LED behavior to be inspected before the physical strip driver is
+enabled. The `rpi-ws281x` output remains target hardware work; the current
+repository bridge simulates its logical outputs.
 
 The WebSocket protocol supports:
 
