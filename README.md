@@ -1,148 +1,228 @@
 # midee
 
-**A beautiful, browser-native MIDI studio.** Drop a `.mid` and it plays on a full
-88-key piano with cascading notes, glowing keys, and particle bursts. Plug in a
-MIDI controller — or just use your laptop keyboard — to play along, loop
-phrases, learn songs, and bounce takes out as a 1080p MP4.
+**A browser-native MIDI studio and piano visualization harness.** Load a MIDI
+file to play it on an 88-key piano with cascading notes, glowing keys, and
+particle effects. Connect a MIDI controller to play live, practice, record,
+loop, and export performances.
 
-Everything runs locally in one browser tab. No install, no upload, no server,
-no watermark.
+The project now also includes an experimental Raspberry Pi verification mode
+for developing an 88-key piano-learning LED strip.
 
-> [**midee.app**](https://midee.app) — open it and drop a file.
-
-<!-- Drop a hero gif/screenshot here when ready: docs/hero.gif -->
-
----
+> Try the standard player at [midee.app](https://midee.app).
 
 ## Features
 
-**Visualizer**
+- 88-key piano visualization with multi-track playback and live note glow.
+- Web MIDI, sustain pedal, and computer-keyboard input.
+- Sampled instruments, looping, session recording, and MIDI export.
+- Synthesia-style practice modes.
+- Local MP4 rendering through WebCodecs.
+- Raspberry Pi LED harness with WebSocket streaming and transport controls.
+- MIDI velocity propagation from the Pi into Midee's normal input,
+  visualization, and synthesizer path.
 
-- 88-key piano with multi-track playback, per-track color, and live note glow.
-- Five themes (Dark, Midnight, Neon, Sunset, Ocean) and a growing library of
-  particle styles.
-- Resizable keyboard, pinnable HUD, chord readout overlay.
+## Local development
 
-**Live performance**
+Requirements:
 
-- Web MIDI controllers, with sustain pedal (CC64) support.
-- QWERTY keyboard fallback (FL Studio layout) for laptops without a controller.
-- Sample-accurate AudioContext scheduling — what you press is what you hear.
-- Sampled instruments.
-  Lazy-loaded so the first paint stays fast.
-
-**Looping & recording**
-
-- Loop station with bar-snap to the metronome, layered overdubs, and an undo
-  stack. Export the loop as `.mid`.
-- Full-session record — capture an entire performance, then save as `.mid` or
-  drop it back into file mode to render an MP4.
-
-**Practice mode**
-
-- Synthesia-style "wait for the right notes" — pauses the song until you play
-  the upcoming chord, then resumes in time. Respects muted tracks.
-
-**MP4 export**
-
-- 60 fps, frame-accurate, audio baked in.
-- 720p, 1080p, vertical (TikTok / Reels), square, or native canvas size.
-- Rendered locally via WebCodecs — no `ffmpeg.wasm`, no `COOP/COEP`
-  gymnastics, no watermark.
-
-**Polish**
-
-- Localized in English, Spanish, French, and Brazilian Portuguese.
-- Touch-friendly on tablets; bottom-sheet popovers on small screens.
-- Privacy-friendly: zero file uploads, zero account, telemetry is opt-in.
-
----
-
-## Why
-
-Existing tools force a tradeoff:
-
-| Tool      | Tradeoff                                   |
-| --------- | ------------------------------------------ |
-| SeeMusic  | Beautiful and native — but paid.           |
-| MIDIano   | Free and web-native — but feels like 2012. |
-| midi2vidi | Server-side, slow, unrefined output.       |
-
-midee is the option that doesn't ask you to give something up. Web-native,
-free, open source, and one click from a publish-ready MP4.
-
----
-
-## Quick start
+- Node.js 18 or newer
+- A modern browser
+- Python 3.11 or newer when running the Raspberry Pi bridge
 
 ```bash
+git clone https://github.com/Cosxin/midee.git
+cd midee
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # static bundle → dist/
+npm run dev
 ```
 
-**Requirements:** Node 18+ and a modern browser with
-[Web MIDI](https://caniuse.com/midi) and
-[WebCodecs](https://caniuse.com/webcodecs) — Chrome 94+, Safari 16.4+,
-Firefox 130+.
+Open <http://localhost:5173> for the normal player.
 
----
-
-## Keyboard
-
-| Key                       | Action                   |
-| ------------------------- | ------------------------ |
-| `Space`                   | Play / pause             |
-| `Z`–`M` · `Q`–`P`         | Play notes (two octaves) |
-| `S D G H J` · `2 3 5 6 7` | Black keys               |
-| `←` / `→`                 | Octave down / up         |
-
-Drop a `.mid` anywhere on the window to load it. Click the customize button in
-the HUD to switch theme, particles, or chord readout.
-
----
-
-## Architecture
-
-Single-page Vite + TypeScript app. Strict layering — nothing in `core/` knows
-about the DOM; nothing in `renderer/` knows about audio.
-
-```
-core/      pure logic (MIDI types, clock, chord/practice engines)
-audio/     Tone.js + sampled instruments + offline render
-renderer/  PixiJS scene, particles, beat grid, keyboard
-midi/      Web MIDI input, loop engine, session recorder
-ui/        vanilla TS + CSS shell (controls, modals, menus)
-export/    WebCodecs encoder + Mediabunny (MP4 mux)
-i18n/      string tables (en bundled, others lazy-loaded)
-store/     tiny Signal<T> reactive primitive
-```
-
-**Rendering** — [PixiJS 8](https://pixijs.com/) on WebGL/WebGPU. One
-`Graphics` per track so same-color notes batch into a single draw call; the
-glow filter is applied only to the active-notes container so per-frame cost
-stays flat as the song grows.
-
-**MIDI parse** — [@tonejs/midi](https://github.com/Tonejs/Midi), normalized
-through a local type layer so nothing downstream depends on it directly.
-
-**Video export** — [Mediabunny](https://mediabunny.dev/) (successor to mp4-muxer) +
-WebCodecs `VideoEncoder`. Frames are driven by the render clock, not wall
-time, so export is deterministic and matches live playback bit-for-bit.
-
-**Tooling** — Vite, TypeScript (strict, `noUncheckedIndexedAccess`), Biome
-for lint/format, Vitest for unit tests.
-
----
-
-## Scripts
+Useful commands:
 
 ```bash
-npm run dev          # vite dev server
-npm run build        # type-check + production build
-npm run preview      # serve dist/
-npm run typecheck    # tsc --noEmit
-npm run lint         # biome check
-npm run test         # vitest run
-npm run check        # typecheck + lint + tests (CI gate)
+npm run dev
+npm run typecheck
+npm run test
+npm run build
 ```
+
+## Raspberry Pi LED verification harness
+
+Open the dedicated harness at:
+
+<http://localhost:5173/?pi=1>
+
+`?pi=1` is the only LED-harness route. It suppresses the normal startup card
+and locale popup, connects automatically, and retries when the bridge or Pi
+restarts. The connection settings can be expanded to change the WebSocket URL.
+
+The harness displays 100 logical outputs:
+
+- Outputs `0-87` correspond to piano notes A0-C8.
+- Outputs `88-99` are reserved auxiliary outputs.
+- MIDI note to LED mapping is `led_index = midi_note - 21`.
+
+The expected row comes from Midee's own active piano keys. The Pi row shows the
+state received from the bridge. Differences are highlighted so timing and
+mapping errors can be seen immediately.
+
+### Data flow
+
+```text
+MIDI file or live audio
+        |
+        v
+Raspberry Pi decoder / audio-to-MIDI inference
+        |
+        v
+MIDI note 21-108 + velocity 0-127
+        |
+        v
+LED mapping + WebSocket bridge (:8765/leds)
+        |
+        v
+Midee ?pi=1 visualization
+```
+
+The WebSocket protocol supports:
+
+```json
+{"type":"set","index":39,"on":true,"velocity":96}
+```
+
+```json
+{"type":"set","index":39,"on":false,"velocity":0}
+```
+
+```json
+{"type":"clear_all"}
+```
+
+Midee converts MIDI velocity from `0-127` into its internal `0-1` range. Older
+bridges that omit velocity use `0.8` as a fallback.
+
+### Reproducible MIDI-file bridge
+
+The repository includes a minimal bridge in [`pi_bridge`](./pi_bridge). It
+decodes a MIDI file on the Pi, simulates 100 LED outputs, and accepts `start`,
+`pause`, `resume`, and `stop` commands from the browser.
+
+On Raspberry Pi OS Lite:
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv
+
+cd ~/midee/pi_bridge
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python server.py --midi /path/to/song.mid
+```
+
+The bridge listens on all interfaces at port `8765`. It does not require GPIO
+or an LED strip.
+
+On the host computer:
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
+Open <http://localhost:5173/?pi=1>. The default bridge address is
+`ws://raspberrypi.local:8765/leds`. If the Pi uses another hostname, expand
+**Pi connection**, enter its `.local` hostname or LAN address, and reconnect.
+
+Use the harness buttons to verify:
+
+1. The Pi decodes the MIDI file.
+2. Notes 21-108 map to outputs 0-87.
+3. Start, pause, resume, and stop work remotely.
+4. Multiple keys remain active at the same time.
+5. Velocity reaches Midee rather than being replaced by a fixed value.
+6. Stop and disconnect clear all active outputs.
+
+### Live Bluetooth audio prototype
+
+The development Pi also runs an experimental live pipeline:
+
+```text
+phone --Bluetooth A2DP/AVRCP--> Raspberry Pi
+      --PipeWire PCM--> Onsets & Velocities model
+      --MIDI-like note events--> WebSocket --> Midee
+```
+
+The prototype currently uses:
+
+- Raspberry Pi OS Lite
+- BlueZ configured as an A2DP audio sink
+- PipeWire and WirePlumber
+- A persistent headless Bluetooth pairing agent
+- An Onsets & Velocities piano-transcription model
+- A 1.0-second inference look-ahead
+- A 750 ms minimum displayed key-down time
+- AVRCP-backed start, pause, resume, and stop commands
+
+This live Bluetooth deployment is platform-specific and is not yet represented
+by a complete, reproducible installer in this repository. Do not treat the
+MIDI-file bridge above as the Bluetooth installer. Before this feature is
+merged, the Pi deployment will be packaged with pinned dependencies, model
+download and checksum verification, generic systemd units, BlueZ/WirePlumber
+configuration, and a clean-install smoke test.
+
+Pairing the phone and selecting the Pi as its media output will remain the only
+expected manual steps.
+
+### Future: host PC as the Bluetooth sink
+
+The next investigation will determine whether the Raspberry Pi can be bypassed
+for development by using the host PC as the A2DP sink and running capture,
+inference, and the WebSocket bridge locally.
+
+The goal is to preserve the same protocol and `?pi=1` UI so the input backend
+can be exchanged without changing the harness:
+
+```text
+phone --> host PC Bluetooth sink --> local inference --> Midee
+```
+
+This is future work, not a currently supported setup. Feasibility will depend
+on the host operating system's ability to expose received Bluetooth audio as a
+capturable stream; Linux, Windows, and macOS provide different A2DP sink
+capabilities.
+
+## Main architecture
+
+```text
+core/       MIDI types, clock, music logic, and practice engines
+audio/      Tone.js instruments and offline rendering
+renderer/   PixiJS piano roll, keyboard, and particles
+midi/       Web MIDI input, looping, recording, and encoding
+pi/         Pi harness UI, protocol parsing, and LED state mapping
+pi_bridge/  Python MIDI-file verification bridge
+ui/         controls, menus, and modals
+export/     WebCodecs video export
+```
+
+## Keyboard controls
+
+| Key | Action |
+| --- | --- |
+| `Space` | Play or pause |
+| `Z-M`, `Q-P` | Play two octaves |
+| `S D G H J`, `2 3 5 6 7` | Play black keys |
+| Left/Right arrow | Shift octave |
+
+## Privacy and security
+
+MIDI files and normal rendering stay in the browser. The Pi harness opens a
+WebSocket only to the address shown in its connection field. Repository
+examples use generic hostnames and contain no passwords, private keys, device
+identifiers, or private network addresses.
+
+Do not commit Pi credentials, paired-device identifiers, local home paths, or
+private model-download tokens. Use environment variables or local ignored
+configuration for machine-specific values.
+
+Third-party transcription models and piano samples may have their own licenses;
+review those terms before adding model or sample binaries to the repository.

@@ -17,7 +17,7 @@ const emptyOutputs = (): boolean[] => Array.from({ length: LED_OUTPUT_COUNT }, (
 export function PiPage() {
   const { services } = useApp()
   const [actual, setActual] = createSignal(emptyOutputs())
-  const [socketUrl, setSocketUrl] = createSignal('ws://192.168.10.220:8765/leds')
+  const [socketUrl, setSocketUrl] = createSignal('ws://raspberrypi.local:8765/leds')
   const [socketStatus, setSocketStatus] = createSignal('disconnected')
   const [settingsOpen, setSettingsOpen] = createSignal(false)
   const [hasActualSnapshot, setHasActualSnapshot] = createSignal(false)

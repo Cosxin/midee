@@ -12,7 +12,7 @@ cd ~/midee-pi-bridge
 ```
 
 Open Midee with `?pi=1`. The page connects to
-`ws://192.168.10.220:8765/leds` automatically and retries if the Pi or bridge
+`ws://raspberrypi.local:8765/leds` automatically and retries if the Pi or bridge
 restarts. Expand **Pi connection** to change the URL or use the transport
 buttons.
 

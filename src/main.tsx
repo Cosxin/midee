@@ -20,6 +20,7 @@ import { AppRoot } from './AppRoot'
 import { createApp } from './createApp'
 import { env } from './env'
 import { currentLocaleNativeName, initI18n, shouldShowLocaleHint, t } from './i18n'
+import { isPiPage } from './pi/piRoute'
 import { AppCtx } from './store/AppCtx'
 import { loadPostHog, registerAnalyticsContext } from './telemetry'
 import { whenIdle } from './whenIdle'
@@ -50,7 +51,9 @@ whenIdle(() => {
 // dynamic import on non-English; English is bundled and resolves instantly.
 async function boot(): Promise<void> {
   await initI18n()
-  const { ctx } = await createApp()
+  const piPage = isPiPage()
+  const { ctx, app } = await createApp()
+  if (piPage) app.dropzone.hide()
   // Solid owns a dedicated child of #ui-overlay so its render() call doesn't
   // wipe the legacy UI (Controls, DropZone, TrackPanel, modals) that the
   // wrapped App class has already mounted into #ui-overlay directly.
@@ -69,7 +72,7 @@ async function boot(): Promise<void> {
   )
   // Subtle one-time onboarding for users whose browser language was
   // auto-detected to a non-English locale.
-  if (shouldShowLocaleHint()) showLocaleHint()
+  if (!piPage && shouldShowLocaleHint()) showLocaleHint()
 
   // Bench runner is a build-time opt-in. `npm run bench` sets
   // VITE_ENABLE_BENCH=1; public prod builds don't, so Vite constant-folds the
