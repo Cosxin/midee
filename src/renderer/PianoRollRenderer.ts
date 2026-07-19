@@ -2,6 +2,7 @@ import { Application, Graphics, type Ticker } from 'pixi.js'
 import type { MasterClock } from '../core/clock/MasterClock'
 import type { MidiFile } from '../core/midi/types'
 import type { LiveNoteStore } from '../midi/LiveNoteStore'
+import { createEventSignal } from '../store/eventSignal'
 import { BeatGrid } from './BeatGrid'
 import { type EmitCadence, scheduleEmissions } from './emitSchedule'
 import { KeyboardRenderer } from './KeyboardRenderer'
@@ -74,6 +75,7 @@ const SUSTAIN_CADENCE: EmitCadence = {
 const IDLE_GRACE_FRAMES = 30
 
 export class PianoRollRenderer {
+  readonly activeKeys = createEventSignal<ReadonlyMap<number, number>>(new Map())
   private app!: Application
   private viewport!: Viewport
   private noteRenderer!: NoteRenderer
@@ -103,6 +105,7 @@ export class PianoRollRenderer {
   // the same pitch — acceptable; the rest of the visualization already does
   // the same.
   private activeKeyColors = new Map<number, number>()
+  private publishedActiveSignature = ''
   private exportMode = false
 
   // Next time (in seconds of clock-time) to emit a sustained trail-burst for
@@ -604,6 +607,7 @@ export class PianoRollRenderer {
       if (this.liveEmitNext.size > 0) this.liveEmitNext.clear()
     }
 
+    this.publishActiveKeys(activeColors)
     this.keyboardRenderer.drawActiveKeys(activeColors, this.viewport)
     this.particles.update(dt)
 
@@ -616,6 +620,16 @@ export class PianoRollRenderer {
       }
       for (const layer of this.externalLayers) layer.update?.(ctx)
     }
+  }
+
+  private publishActiveKeys(activeColors: ReadonlyMap<number, number>): void {
+    const signature = [...activeColors.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([pitch, color]) => `${pitch}:${color}`)
+      .join(',')
+    if (signature === this.publishedActiveSignature) return
+    this.publishedActiveSignature = signature
+    this.activeKeys.set(new Map(activeColors))
   }
 
   // Register an additive visual layer on top of the built-in scene. Layers are
