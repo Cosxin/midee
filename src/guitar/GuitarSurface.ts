@@ -44,9 +44,23 @@ export interface ScheduledGuitarVoice extends AssignedGuitarVoice {
   endTime: number
 }
 
+/**
+ * Balanced BST over schedule notes (already sorted by start time); each node id is its
+ * note's array index, and every node carries the max endTime across its own subtree.
+ * `queryGuitarSchedule` walks this to prune subtrees that already expired instead of
+ * rescanning every note behind `currentTime`, so a single long-sustained note can't force
+ * an O(N) lookback across intervening short notes.
+ */
+export interface GuitarScheduleIndex {
+  readonly left: Int32Array
+  readonly right: Int32Array
+  readonly maxEnd: Float64Array
+  readonly root: number
+}
+
 export interface GuitarSchedule {
-  notes: readonly ScheduledGuitarVoice[]
-  maxDuration: number
+  readonly notes: readonly ScheduledGuitarVoice[]
+  readonly index: GuitarScheduleIndex
 }
 
 export interface GuitarScheduleWindow {
@@ -84,10 +98,35 @@ export function buildGuitarSchedule(source: MidiFile): GuitarSchedule {
       }),
     )
     .sort((left, right) => left.time - right.time || left.voiceId.localeCompare(right.voiceId))
-  return {
-    notes,
-    maxDuration: notes.reduce((max, note) => Math.max(max, note.duration), 0),
+  return indexGuitarNotes(notes)
+}
+
+/** Builds a schedule (with its interval index) from notes already sorted by (time, voiceId). */
+export function indexGuitarNotes(notes: readonly ScheduledGuitarVoice[]): GuitarSchedule {
+  return { notes, index: buildScheduleIndex(notes) }
+}
+
+function buildScheduleIndex(notes: readonly ScheduledGuitarVoice[]): GuitarScheduleIndex {
+  const count = notes.length
+  const left = new Int32Array(count).fill(-1)
+  const right = new Int32Array(count).fill(-1)
+  const maxEnd = new Float64Array(count)
+
+  const build = (lo: number, hi: number): number => {
+    if (lo >= hi) return -1
+    const mid = (lo + hi) >> 1
+    const leftId = build(lo, mid)
+    const rightId = build(mid + 1, hi)
+    left[mid] = leftId
+    right[mid] = rightId
+    let best = notes[mid]!.endTime
+    if (leftId >= 0 && maxEnd[leftId]! > best) best = maxEnd[leftId]!
+    if (rightId >= 0 && maxEnd[rightId]! > best) best = maxEnd[rightId]!
+    maxEnd[mid] = best
+    return mid
   }
+
+  return { left, right, maxEnd, root: build(0, count) }
 }
 
 export function queryGuitarSchedule(
@@ -95,18 +134,49 @@ export function queryGuitarSchedule(
   currentTime: number,
   upcomingSeconds = HIGHWAY_SECONDS,
 ): GuitarScheduleWindow {
+  const { notes, index } = schedule
   const active: ScheduledGuitarVoice[] = []
+  let inspected = collectActiveNotes(index, notes, currentTime, active)
+
   const upcoming: ScheduledGuitarVoice[] = []
-  const start = lowerBoundTime(schedule.notes, Math.max(0, currentTime - schedule.maxDuration))
-  let inspected = 0
-  for (let index = start; index < schedule.notes.length; index++) {
-    const note = schedule.notes[index]!
-    if (note.time > currentTime + upcomingSeconds) break
+  const upcomingLimit = currentTime + upcomingSeconds
+  const upcomingStart = lowerBoundTime(notes, currentTime)
+  for (let i = upcomingStart; i < notes.length; i++) {
+    const note = notes[i]!
+    if (note.time > upcomingLimit) break
     inspected++
-    if (note.time <= currentTime && note.endTime > currentTime) active.push(note)
-    else if (note.time >= currentTime) upcoming.push(note)
+    if (note.time <= currentTime && note.endTime > currentTime) continue
+    upcoming.push(note)
   }
   return { active, upcoming, inspected }
+}
+
+/**
+ * Point-stabbing query over the interval index: collects notes active at `time` in
+ * ascending (time, voiceId) order, descending only into subtrees whose max endTime
+ * can still reach `time` and whose starts can still be `<= time`.
+ */
+function collectActiveNotes(
+  index: GuitarScheduleIndex,
+  notes: readonly ScheduledGuitarVoice[],
+  time: number,
+  out: ScheduledGuitarVoice[],
+): number {
+  let inspected = 0
+  const visit = (nodeId: number): void => {
+    if (nodeId < 0) return
+    inspected++
+    const note = notes[nodeId]!
+    const leftId = index.left[nodeId]!
+    if (leftId >= 0 && index.maxEnd[leftId]! > time) visit(leftId)
+    if (note.time <= time) {
+      if (note.endTime > time) out.push(note)
+      const rightId = index.right[nodeId]!
+      if (rightId >= 0 && index.maxEnd[rightId]! > time) visit(rightId)
+    }
+  }
+  visit(index.root)
+  return inspected
 }
 
 function lowerBoundTime(notes: readonly ScheduledGuitarVoice[], time: number): number {
@@ -187,7 +257,7 @@ export class GuitarSurface implements VisualizationSurface {
   private layout = createGuitarLayout(1, 1)
   private theme: Theme = darkTheme
   private midi: MidiFile | null = null
-  private schedule: GuitarSchedule = { notes: [], maxDuration: 0 }
+  private schedule: GuitarSchedule = indexGuitarNotes([])
   private currentWindow: GuitarScheduleWindow = { active: [], upcoming: [], inspected: 0 }
   private liveStore: LiveNoteStore | null = null
   private loopStore: LiveNoteStore | null = null
@@ -249,7 +319,7 @@ export class GuitarSurface implements VisualizationSurface {
 
   clearMidi(): void {
     this.midi = null
-    this.schedule = { notes: [], maxDuration: 0 }
+    this.schedule = indexGuitarNotes([])
     this.currentWindow = { active: [], upcoming: [], inspected: 0 }
     this.interaction.cancelAll()
     this.renderStaticFrame(0)

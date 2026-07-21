@@ -7,8 +7,8 @@ import {
   buildGuitarSchedule,
   GUITAR_CLUSTER_WINDOW_SECONDS,
   GuitarRenderActivity,
-  type GuitarSchedule,
   GuitarSurface,
+  indexGuitarNotes,
   queryGuitarSchedule,
   type ScheduledGuitarVoice,
 } from './GuitarSurface'
@@ -84,11 +84,106 @@ describe('guitar schedule', () => {
       position: { string: 0, fret: 0 },
       supported: true,
     }))
-    const schedule: GuitarSchedule = { notes, maxDuration: 0.05 }
+    const schedule = indexGuitarNotes(notes)
     const window = queryGuitarSchedule(schedule, 900, 2.4)
-    expect(window.inspected).toBeLessThan(30)
+    expect(window.inspected).toBeLessThan(100)
     expect(window.active[0]?.time).toBe(900)
     expect(window.upcoming[0]?.time).toBeCloseTo(900.1)
+  })
+
+  it('keeps active queries logarithmic when one long sustain spans thousands of expired notes', () => {
+    const SHORT_NOTE_COUNT = 8_000
+    const longNote: ScheduledGuitarVoice = {
+      pitch: 40,
+      time: 0,
+      duration: 3600,
+      endTime: 3600,
+      voiceId: 'scheduled:long:0',
+      sourceId: 'long',
+      position: { string: 0, fret: 0 },
+      supported: true,
+    }
+    // Short notes densely fill [0.001, 800) and all expire long before currentTime.
+    const shortNotes: ScheduledGuitarVoice[] = Array.from(
+      { length: SHORT_NOTE_COUNT },
+      (_, index) => {
+        const time = 0.001 + index * 0.1
+        return {
+          pitch: 41 + (index % 20),
+          time,
+          duration: 0.01,
+          endTime: time + 0.01,
+          voiceId: `scheduled:short:${index}`,
+          sourceId: 'short',
+          position: { string: 1, fret: index % 20 },
+          supported: true,
+        }
+      },
+    )
+    // A couple of notes land just after currentTime to verify upcoming stays correct.
+    const upcomingA: ScheduledGuitarVoice = {
+      pitch: 50,
+      time: 1800.5,
+      duration: 0.1,
+      endTime: 1800.6,
+      voiceId: 'scheduled:upcoming:0',
+      sourceId: 'upcoming',
+      position: { string: 2, fret: 3 },
+      supported: true,
+    }
+    const upcomingB: ScheduledGuitarVoice = {
+      pitch: 51,
+      time: 1801.0,
+      duration: 0.1,
+      endTime: 1801.1,
+      voiceId: 'scheduled:upcoming:1',
+      sourceId: 'upcoming',
+      position: { string: 2, fret: 4 },
+      supported: true,
+    }
+    const notes = [longNote, ...shortNotes, upcomingA, upcomingB].sort(
+      (left, right) => left.time - right.time || left.voiceId.localeCompare(right.voiceId),
+    )
+    const totalNotes = notes.length
+    const schedule = indexGuitarNotes(notes)
+
+    // currentTime is well after every short note has expired, but still inside the long sustain.
+    const window = queryGuitarSchedule(schedule, 1800, 2.4)
+
+    expect(window.active).toHaveLength(1)
+    expect(window.active[0]?.voiceId).toBe(longNote.voiceId)
+
+    expect(window.upcoming.map((note) => note.voiceId)).toEqual([
+      upcomingA.voiceId,
+      upcomingB.voiceId,
+    ])
+
+    // Deterministic work bound: must stay near log2(N), nowhere close to a full rescan.
+    expect(window.inspected).toBeLessThan(100)
+    expect(window.inspected).toBeLessThan(totalNotes / 20)
+  })
+
+  it('treats a zero-duration note as upcoming-not-active exactly at its own start time', () => {
+    const notes: ScheduledGuitarVoice[] = [
+      {
+        pitch: 60,
+        time: 5,
+        duration: 0,
+        endTime: 5,
+        voiceId: 'scheduled:zero:0',
+        sourceId: 'zero',
+        position: { string: 3, fret: 0 },
+        supported: true,
+      },
+    ]
+    const schedule = indexGuitarNotes(notes)
+    const atStart = queryGuitarSchedule(schedule, 5, 2.4)
+    expect(atStart.active).toHaveLength(0)
+    expect(atStart.upcoming.map((note) => note.voiceId)).toEqual(['scheduled:zero:0'])
+
+    const afterStart = queryGuitarSchedule(schedule, 5.0001, 2.4)
+    expect(afterStart.active).toHaveLength(0)
+    expect(afterStart.upcoming).toHaveLength(0)
   })
 })
 
