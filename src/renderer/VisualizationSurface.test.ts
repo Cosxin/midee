@@ -31,6 +31,9 @@ const METHODS: readonly (keyof VisualizationSurface)[] = [
   'setLiveNotesVisible',
   'resize',
   'renderStaticFrame',
+  'renderManualFrame',
+  'pauseAutoRender',
+  'resumeAutoRender',
   'setVisible',
   'setPracticeHints',
   'setPracticeTrackFocus',
@@ -65,5 +68,10 @@ describe('PianoRollRenderer adapts VisualizationSurface', () => {
     // shape (a `ReadonlySet<VisualizationHitId>`, i.e. numeric pitches),
     // not the render output.
     expect(() => renderer.setPracticeTrackFocus(new Set(['track-a']))).not.toThrow()
+  })
+
+  it('keeps surface hits optional for the passive piano surface', () => {
+    const renderer: VisualizationSurface = new PianoRollRenderer()
+    expect(renderer.surfaceHits).toBeUndefined()
   })
 })

@@ -1,43 +1,52 @@
+import type { SurfaceHit } from '../renderer/VisualizationSurface'
 import type { GuitarPosition } from './types'
 
 export const AUTO_FOLLOW_SUSPEND_MS = 3_000
 
-export type SurfaceHitPhase = 'on' | 'off' | 'cancel'
-
-export interface SurfaceHit {
-  phase: SurfaceHitPhase
-  pitch: number
-  string: number
-  fret: number
-  pointerId: number | 'keyboard'
-  velocity: number
-}
+const FRETBOARD_SOURCE_ID = 'guitar:fretboard'
 
 export class FretboardInteraction {
-  private readonly activePointers = new Map<number, { position: GuitarPosition; pitch: number }>()
+  private readonly activePointers = new Map<
+    number,
+    { position: GuitarPosition; pitch: number; voiceId: string }
+  >()
   private manualPanUntil = 0
+  private nextVoiceId = 1
 
   constructor(private readonly emit: (hit: SurfaceHit) => void) {}
 
   pointerDown(pointerId: number, position: GuitarPosition, pitch: number, velocity = 1): void {
     const existing = this.activePointers.get(pointerId)
-    if (existing) this.endPointer(pointerId, 'cancel')
-    this.activePointers.set(pointerId, { position, pitch })
-    this.emit({ phase: 'on', pitch, ...position, pointerId, velocity })
+    if (existing) this.endPointer(pointerId)
+    const voiceId = this.createVoiceId(`pointer-${pointerId}`)
+    this.activePointers.set(pointerId, { position, pitch, voiceId })
+    this.emit({
+      type: 'note-on',
+      pitch,
+      velocity,
+      sourceId: FRETBOARD_SOURCE_ID,
+      voiceId,
+      ...position,
+    })
   }
 
   pointerUp(pointerId: number): void {
-    this.endPointer(pointerId, 'off')
+    this.endPointer(pointerId)
   }
 
   pointerCancel(pointerId: number): void {
-    this.endPointer(pointerId, 'cancel')
+    this.endPointer(pointerId)
   }
 
   keyboardActivate(position: GuitarPosition, pitch: number): void {
-    const base = { pitch, ...position, pointerId: 'keyboard' as const, velocity: 1 }
-    this.emit({ phase: 'on', ...base })
-    this.emit({ phase: 'off', ...base })
+    const base = {
+      pitch,
+      ...position,
+      sourceId: FRETBOARD_SOURCE_ID,
+      voiceId: this.createVoiceId('keyboard'),
+    }
+    this.emit({ type: 'note-on', velocity: 1, ...base })
+    this.emit({ type: 'note-off', velocity: 0, ...base })
   }
 
   noteManualPan(now: number): void {
@@ -50,14 +59,25 @@ export class FretboardInteraction {
 
   cancelAll(): void {
     for (const pointerId of Array.from(this.activePointers.keys())) {
-      this.endPointer(pointerId, 'cancel')
+      this.endPointer(pointerId)
     }
   }
 
-  private endPointer(pointerId: number, phase: 'off' | 'cancel'): void {
+  private endPointer(pointerId: number): void {
     const active = this.activePointers.get(pointerId)
     if (!active) return
     this.activePointers.delete(pointerId)
-    this.emit({ phase, pitch: active.pitch, ...active.position, pointerId, velocity: 0 })
+    this.emit({
+      type: 'note-off',
+      pitch: active.pitch,
+      velocity: 0,
+      sourceId: FRETBOARD_SOURCE_ID,
+      voiceId: active.voiceId,
+      ...active.position,
+    })
+  }
+
+  private createVoiceId(origin: string): string {
+    return `${FRETBOARD_SOURCE_ID}:${origin}:${this.nextVoiceId++}`
   }
 }

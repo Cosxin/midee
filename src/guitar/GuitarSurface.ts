@@ -6,6 +6,7 @@ import type { RenderLayer } from '../renderer/RenderLayer'
 import { darkTheme, getTrackColor, type Theme } from '../renderer/theme'
 import type {
   LiveVoiceSource,
+  SurfaceHit,
   VisualizationFrameSource,
   VisualizationHitId,
   VisualizationSurface,
@@ -13,7 +14,7 @@ import type {
 import { Viewport } from '../renderer/viewport'
 import type { EventSignal } from '../store/eventSignal'
 import { createEventSignal } from '../store/eventSignal'
-import { FretboardInteraction, type SurfaceHit } from './FretboardInteraction'
+import { FretboardInteraction } from './FretboardInteraction'
 import { assignGuitarCluster, precomputeGuitarFingerings } from './fingering'
 import {
   centeredPanForFret,
@@ -29,11 +30,140 @@ import {
   positionAtPoint,
   positionRect,
 } from './GuitarGeometry'
-import { candidatePositions } from './profile'
-import type { AssignedGuitarVoice, GuitarClusterAssignment, GuitarPosition } from './types'
+import { candidatePositions, STANDARD_GUITAR_PROFILE } from './profile'
+import type { AssignedGuitarVoice, GuitarPosition, GuitarVoice } from './types'
 
 const HIGHWAY_SECONDS = 2.4
+export const GUITAR_CLUSTER_WINDOW_SECONDS = 0.04
+const IDLE_GRACE_FRAMES = 30
 const STRING_NAMES = ['Low E', 'A', 'D', 'G', 'B', 'High E'] as const
+
+export interface ScheduledGuitarVoice extends AssignedGuitarVoice {
+  voiceId: string
+  duration: number
+  endTime: number
+}
+
+export interface GuitarSchedule {
+  notes: readonly ScheduledGuitarVoice[]
+  maxDuration: number
+}
+
+export interface GuitarScheduleWindow {
+  active: ScheduledGuitarVoice[]
+  upcoming: ScheduledGuitarVoice[]
+  inspected: number
+}
+
+export function buildGuitarSchedule(source: MidiFile): GuitarSchedule {
+  const durations = new Map<string, number>()
+  const voices: GuitarVoice[] = []
+  for (const track of source.tracks) {
+    track.notes.forEach((note, noteIndex) => {
+      const voiceId = `scheduled:${track.id}:${noteIndex}`
+      durations.set(voiceId, note.duration)
+      voices.push({
+        pitch: note.pitch,
+        time: note.time,
+        channel: track.channel,
+        sourceId: track.id,
+        voiceId,
+      })
+    })
+  }
+  const notes = precomputeGuitarFingerings(
+    voices,
+    STANDARD_GUITAR_PROFILE,
+    GUITAR_CLUSTER_WINDOW_SECONDS,
+  )
+    .flatMap((cluster) =>
+      cluster.voices.map((voice) => {
+        const voiceId = voice.voiceId!
+        const duration = durations.get(voiceId) ?? 0
+        return { ...voice, voiceId, duration, endTime: voice.time + duration }
+      }),
+    )
+    .sort((left, right) => left.time - right.time || left.voiceId.localeCompare(right.voiceId))
+  return {
+    notes,
+    maxDuration: notes.reduce((max, note) => Math.max(max, note.duration), 0),
+  }
+}
+
+export function queryGuitarSchedule(
+  schedule: GuitarSchedule,
+  currentTime: number,
+  upcomingSeconds = HIGHWAY_SECONDS,
+): GuitarScheduleWindow {
+  const active: ScheduledGuitarVoice[] = []
+  const upcoming: ScheduledGuitarVoice[] = []
+  const start = lowerBoundTime(schedule.notes, Math.max(0, currentTime - schedule.maxDuration))
+  let inspected = 0
+  for (let index = start; index < schedule.notes.length; index++) {
+    const note = schedule.notes[index]!
+    if (note.time > currentTime + upcomingSeconds) break
+    inspected++
+    if (note.time <= currentTime && note.endTime > currentTime) active.push(note)
+    else if (note.time >= currentTime) upcoming.push(note)
+  }
+  return { active, upcoming, inspected }
+}
+
+function lowerBoundTime(notes: readonly ScheduledGuitarVoice[], time: number): number {
+  let low = 0
+  let high = notes.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (notes[middle]!.time < time) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
+export class GuitarRenderActivity {
+  idleFrames = 0
+  exportMode = false
+
+  wake(): void {
+    this.idleFrames = 0
+  }
+
+  shouldRender(animating: boolean): boolean {
+    if (this.exportMode) return false
+    if (animating) {
+      this.idleFrames = 0
+      return true
+    }
+    if (this.idleFrames >= IDLE_GRACE_FRAMES) return false
+    this.idleFrames++
+    return true
+  }
+}
+
+export class AccessibilityTargetCache {
+  private signature = ''
+
+  needsRebuild(width: number, height: number, panX: number): boolean {
+    const next = `${width}:${height}:${panX}`
+    if (next === this.signature) return false
+    this.signature = next
+    return true
+  }
+
+  invalidate(): void {
+    this.signature = ''
+  }
+}
+
+export function applySurfaceResize(
+  renderer: { resolution: number; resize(width: number, height: number): void },
+  width: number,
+  height: number,
+  resolution?: number,
+): void {
+  if (resolution !== undefined) renderer.resolution = resolution
+  renderer.resize(width, height)
+}
 
 interface PointerGesture {
   startX: number
@@ -48,16 +178,17 @@ export class GuitarSurface implements VisualizationSurface {
   readonly surfaceHits: EventSignal<SurfaceHit | null> = createEventSignal<SurfaceHit | null>(null)
 
   private app!: Application
-  private viewport!: Viewport
+  private compatibilityViewport!: Viewport
   private scene!: Container
   private graphics!: Graphics
   private labels!: Container
   private accessibleTargets!: Container
-  private accessiblePanX = Number.NaN
+  private accessibleCache = new AccessibilityTargetCache()
   private layout = createGuitarLayout(1, 1)
   private theme: Theme = darkTheme
   private midi: MidiFile | null = null
-  private assignments: GuitarClusterAssignment[] = []
+  private schedule: GuitarSchedule = { notes: [], maxDuration: 0 }
+  private currentWindow: GuitarScheduleWindow = { active: [], upcoming: [], inspected: 0 }
   private liveStore: LiveNoteStore | null = null
   private loopStore: LiveNoteStore | null = null
   private liveStoreUnsub: (() => void) | null = null
@@ -72,6 +203,8 @@ export class GuitarSurface implements VisualizationSurface {
   private layers: RenderLayer[] = []
   private gestures = new Map<number, PointerGesture>()
   private interaction = new FretboardInteraction((hit) => this.surfaceHits.set(hit))
+  private activity = new GuitarRenderActivity()
+  private clock: MasterClock | null = null
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -90,7 +223,7 @@ export class GuitarSurface implements VisualizationSurface {
     this.accessibleTargets = new Container()
     this.scene.addChild(this.graphics, this.labels, this.accessibleTargets)
     this.app.stage.addChild(this.scene)
-    this.viewport = new Viewport({
+    this.compatibilityViewport = new Viewport({
       canvasWidth: this.app.screen.width,
       canvasHeight: this.app.screen.height,
       keyboardHeight: 0,
@@ -102,56 +235,54 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   attachClock(clock: MasterClock): void {
-    this.app.ticker.add((ticker: Ticker) =>
-      this.renderFrame(clock.currentTime, ticker.deltaMS / 1000),
-    )
-    this.clockUnsub = clock.subscribe(() => this.renderStaticFrame(clock.currentTime))
+    this.clock = clock
+    this.app.ticker.add((ticker: Ticker) => this.onTick(ticker))
+    this.clockUnsub = clock.subscribe(() => this.wake())
   }
 
   loadMidi(source: VisualizationFrameSource): void {
     this.midi = source
-    const voices = source.tracks.flatMap((track) =>
-      track.notes.map((note) => ({
-        pitch: note.pitch,
-        time: note.time,
-        channel: track.channel,
-        sourceId: track.id,
-      })),
-    )
-    this.assignments = precomputeGuitarFingerings(voices)
+    this.schedule = buildGuitarSchedule(source)
     this.renderStaticFrame(0)
+    this.wake()
   }
 
   clearMidi(): void {
     this.midi = null
-    this.assignments = []
+    this.schedule = { notes: [], maxDuration: 0 }
+    this.currentWindow = { active: [], upcoming: [], inspected: 0 }
     this.interaction.cancelAll()
     this.renderStaticFrame(0)
+    this.wake()
   }
 
   setLiveNoteStore(store: LiveVoiceSource): void {
     this.liveStoreUnsub?.()
     this.liveStore = store
-    this.liveStoreUnsub = store.onChange(() => this.renderStaticFrame(this.lastTime))
+    this.liveStoreUnsub = store.onChange(() => this.wake())
+    this.wake()
   }
 
   setLoopNoteStore(store: LiveVoiceSource | null): void {
     this.loopStoreUnsub?.()
     this.loopStore = store
-    this.loopStoreUnsub = store?.onChange(() => this.renderStaticFrame(this.lastTime)) ?? null
+    this.loopStoreUnsub = store?.onChange(() => this.wake()) ?? null
+    this.wake()
   }
 
   setLiveNotesVisible(visible: boolean): void {
     this.liveNotesVisible = visible
     this.renderStaticFrame(this.lastTime)
+    this.wake()
   }
 
   resize(width: number, height: number, resolution?: number): void {
-    if (resolution !== undefined) this.app.renderer.resolution = resolution
-    this.app.renderer.resize(width, height)
+    applySurfaceResize(this.app.renderer, width, height, resolution)
     this.layout = createGuitarLayout(width, height)
     this.panX = Math.min(this.panX, this.layout.maxPan)
-    this.viewport.update({ canvasWidth: width, canvasHeight: height })
+    this.compatibilityViewport.update({ canvasWidth: width, canvasHeight: height })
+    this.invalidateAccessibleTargets()
+    this.rebuildLayers()
     this.renderStaticFrame(this.lastTime)
   }
 
@@ -160,10 +291,28 @@ export class GuitarSurface implements VisualizationSurface {
     this.app.renderer.render(this.app.stage)
   }
 
+  renderManualFrame(time: number, dt: number): void {
+    this.renderFrame(time, dt)
+    this.app.renderer.render(this.app.stage)
+  }
+
+  pauseAutoRender(): void {
+    this.activity.exportMode = true
+    this.app.ticker.stop()
+    this.interaction.cancelAll()
+    this.gestures.clear()
+  }
+
+  resumeAutoRender(): void {
+    this.activity.exportMode = false
+    this.wake()
+  }
+
   setVisible(visible: boolean): void {
     this.app.stage.visible = visible
     this.app.canvas.style.visibility = visible ? '' : 'hidden'
-    if (!visible) this.interaction.cancelAll()
+    document.body.classList.toggle('canvas-hidden', !visible)
+    if (!visible) this.cleanupGestures()
     if (visible) this.renderStaticFrame(this.lastTime)
   }
 
@@ -186,7 +335,14 @@ export class GuitarSurface implements VisualizationSurface {
     this.layers.push(layer)
     this.layers.sort((a, b) => a.zIndex - b.zIndex)
     layer.mount(this.app.stage)
-    layer.rebuild?.({ viewport: this.viewport, theme: this.theme, time: this.lastTime, dt: 0 })
+    layer.rebuild?.({
+      viewport: this.compatibilityViewport,
+      theme: this.theme,
+      time: this.lastTime,
+      dt: 0,
+    })
+    this.renderStaticFrame(this.lastTime)
+    this.wake()
   }
 
   removeLayer(layer: RenderLayer): void {
@@ -194,11 +350,13 @@ export class GuitarSurface implements VisualizationSurface {
     if (index < 0) return
     this.layers.splice(index, 1)
     layer.unmount()
+    this.renderStaticFrame(this.lastTime)
   }
 
   setTheme(theme: Theme): void {
     this.theme = theme
     this.app.renderer.background.color = theme.background
+    this.rebuildLayers()
     this.renderStaticFrame(this.lastTime)
   }
 
@@ -206,8 +364,8 @@ export class GuitarSurface implements VisualizationSurface {
     return this.theme
   }
 
-  get currentViewport(): Viewport {
-    return this.viewport
+  get currentViewport(): undefined {
+    return undefined
   }
 
   get canvas(): HTMLCanvasElement {
@@ -225,38 +383,67 @@ export class GuitarSurface implements VisualizationSurface {
   destroy(): void {
     window.removeEventListener('resize', this.handleResize)
     this.unbindCanvasEvents()
-    this.interaction.cancelAll()
+    this.cleanupGestures()
     this.liveStoreUnsub?.()
     this.loopStoreUnsub?.()
     this.clockUnsub?.()
+    document.body.classList.remove('canvas-hidden')
     for (const layer of this.layers) layer.unmount()
     this.layers = []
     this.app.destroy(false, { children: true })
   }
 
+  wake(): void {
+    this.activity.wake()
+    if (this.app && !this.activity.exportMode && !this.app.ticker.started) this.app.ticker.start()
+  }
+
+  private onTick(ticker: Ticker): void {
+    const clock = this.clock
+    if (!clock) return
+    const hasLive =
+      this.liveNotesVisible &&
+      ((this.liveStore?.heldVoices.size ?? 0) > 0 || (this.loopStore?.heldVoices.size ?? 0) > 0)
+    const animating = clock.playing || hasLive || this.layers.length > 0
+    if (!this.activity.shouldRender(animating)) {
+      this.app.ticker.stop()
+      return
+    }
+    this.renderFrame(clock.currentTime, ticker.deltaMS / 1000)
+  }
+
+  private rebuildLayers(): void {
+    for (const layer of this.layers) {
+      layer.rebuild?.({
+        viewport: this.compatibilityViewport,
+        theme: this.theme,
+        time: this.lastTime,
+        dt: 0,
+      })
+    }
+  }
+
   private renderFrame(currentTime: number, dt: number): void {
     this.lastTime = currentTime
-    const active = this.collectActive(currentTime)
+    this.currentWindow = queryGuitarSchedule(this.schedule, currentTime)
+    const active = this.collectActive()
     const follow = active.find((voice) => voice.position)?.position
     if (follow && this.interaction.canAutoFollow(performance.now())) {
       this.panX = centeredPanForFret(follow.fret, this.layout)
     }
     this.draw(active, currentTime)
     for (const layer of this.layers) {
-      layer.update?.({ viewport: this.viewport, theme: this.theme, time: currentTime, dt })
+      layer.update?.({
+        viewport: this.compatibilityViewport,
+        theme: this.theme,
+        time: currentTime,
+        dt,
+      })
     }
   }
 
-  private collectActive(currentTime: number): AssignedGuitarVoice[] {
-    const scheduled: AssignedGuitarVoice[] = []
-    for (const cluster of this.assignments) {
-      if (cluster.time > currentTime) break
-      for (const voice of cluster.voices) {
-        const duration = this.durationForVoice(voice)
-        if (currentTime < voice.time + duration) scheduled.push(voice)
-      }
-    }
-    if (!this.liveNotesVisible) return scheduled
+  private collectActive(): AssignedGuitarVoice[] {
+    if (!this.liveNotesVisible) return this.currentWindow.active
     const liveVoices = [this.liveStore, this.loopStore].flatMap((store) =>
       store
         ? Array.from(store.heldVoices.values(), (note) => ({
@@ -268,15 +455,7 @@ export class GuitarSurface implements VisualizationSurface {
           }))
         : [],
     )
-    return [...scheduled, ...assignGuitarCluster(liveVoices).voices]
-  }
-
-  private durationForVoice(voice: AssignedGuitarVoice): number {
-    const track = this.midi?.tracks.find((candidate) => candidate.id === voice.sourceId)
-    const note = track?.notes.find(
-      (candidate) => candidate.pitch === voice.pitch && candidate.time === voice.time,
-    )
-    return note?.duration ?? 0
+    return [...this.currentWindow.active, ...assignGuitarCluster(liveVoices).voices]
   }
 
   private draw(active: readonly AssignedGuitarVoice[], currentTime: number): void {
@@ -321,19 +500,17 @@ export class GuitarSurface implements VisualizationSurface {
       alpha: this.theme.nowLineAlpha,
       width: 2,
     })
-    for (const cluster of this.assignments) {
-      const delta = cluster.time - currentTime
+    for (const voice of this.currentWindow.upcoming) {
+      const delta = voice.time - currentTime
       if (delta < 0 || delta > HIGHWAY_SECONDS) continue
-      for (const voice of cluster.voices) {
-        const y = nowY - (delta / HIGHWAY_SECONDS) * Math.max(1, nowY - 34)
-        if (!voice.position) {
-          this.drawUnsupported(g, voice, this.colorForVoice(voice), 0, y)
-          continue
-        }
-        const x = highwayLaneX(voice.position.string, this.layout)
-        g.circle(x, y, 7).fill({ color: this.colorForVoice(voice), alpha: 0.88 })
-        this.addText(String(voice.position.fret), x, y, 9, 1, 0.5)
+      const y = nowY - (delta / HIGHWAY_SECONDS) * Math.max(1, nowY - 34)
+      if (!voice.position) {
+        this.drawUnsupported(g, voice, this.colorForVoice(voice), 0, y)
+        continue
       }
+      const x = highwayLaneX(voice.position.string, this.layout)
+      g.circle(x, y, 7).fill({ color: this.colorForVoice(voice), alpha: 0.88 })
+      this.addText(String(voice.position.fret), x, y, 9, 1, 0.5)
     }
   }
 
@@ -363,11 +540,12 @@ export class GuitarSurface implements VisualizationSurface {
       color: this.theme.background,
       alpha: 0.96,
     })
-    if (this.accessiblePanX !== this.panX) this.buildAccessibleTargets()
+    if (this.accessibleCache.needsRebuild(this.layout.width, this.layout.height, this.panX)) {
+      this.buildAccessibleTargets()
+    }
   }
 
   private buildAccessibleTargets(): void {
-    this.accessiblePanX = this.panX
     this.accessibleTargets.removeChildren().forEach((child) => {
       child.destroy()
     })
@@ -495,6 +673,7 @@ export class GuitarSurface implements VisualizationSurface {
     canvas.addEventListener('pointermove', this.onPointerMove)
     canvas.addEventListener('pointerup', this.onPointerUp)
     canvas.addEventListener('pointercancel', this.onPointerCancel)
+    canvas.addEventListener('lostpointercapture', this.onLostPointerCapture)
     canvas.addEventListener('wheel', this.onWheel, { passive: false })
   }
 
@@ -504,6 +683,7 @@ export class GuitarSurface implements VisualizationSurface {
     canvas.removeEventListener('pointermove', this.onPointerMove)
     canvas.removeEventListener('pointerup', this.onPointerUp)
     canvas.removeEventListener('pointercancel', this.onPointerCancel)
+    canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture)
     canvas.removeEventListener('wheel', this.onWheel)
   }
 
@@ -541,12 +721,17 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private onPointerUp = (event: PointerEvent): void => {
-    const gesture = this.gestures.get(event.pointerId)
     this.gestures.delete(event.pointerId)
-    if (gesture?.startedOnNote && !gesture.panning) this.interaction.pointerUp(event.pointerId)
+    this.interaction.pointerUp(event.pointerId)
   }
 
   private onPointerCancel = (event: PointerEvent): void => {
+    this.gestures.delete(event.pointerId)
+    this.interaction.pointerCancel(event.pointerId)
+  }
+
+  private onLostPointerCapture = (event: PointerEvent): void => {
+    if (!this.gestures.has(event.pointerId)) return
     this.gestures.delete(event.pointerId)
     this.interaction.pointerCancel(event.pointerId)
   }
@@ -561,7 +746,13 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private handleResize = (): void => this.resize(window.innerWidth, window.innerHeight)
-}
 
-// Kept exported for focused event tests without booting WebGL.
-export type { SurfaceHit } from './FretboardInteraction'
+  private invalidateAccessibleTargets(): void {
+    this.accessibleCache.invalidate()
+  }
+
+  private cleanupGestures(): void {
+    this.gestures.clear()
+    this.interaction.cancelAll()
+  }
+}

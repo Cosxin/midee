@@ -1,50 +1,71 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  AUTO_FOLLOW_SUSPEND_MS,
-  FretboardInteraction,
-  type SurfaceHit,
-} from './FretboardInteraction'
+import type { SurfaceHit } from '../renderer/VisualizationSurface'
+import { AUTO_FOLLOW_SUSPEND_MS, FretboardInteraction } from './FretboardInteraction'
 
 describe('FretboardInteraction', () => {
-  it('tracks simultaneous pointers through independent note on/off lifecycles', () => {
+  it('reuses one normalized voice ID for each pointer note-on/off lifecycle', () => {
     const hits: SurfaceHit[] = []
     const interaction = new FretboardInteraction((hit) => hits.push(hit))
     interaction.pointerDown(1, { string: 0, fret: 3 }, 43, 0.8)
     interaction.pointerDown(2, { string: 5, fret: 5 }, 69)
     interaction.pointerUp(2)
     interaction.pointerUp(1)
-    expect(hits.map((hit) => [hit.phase, hit.pointerId, hit.pitch])).toEqual([
-      ['on', 1, 43],
-      ['on', 2, 69],
-      ['off', 2, 69],
-      ['off', 1, 43],
+
+    expect(hits.map(({ type, pitch }) => [type, pitch])).toEqual([
+      ['note-on', 43],
+      ['note-on', 69],
+      ['note-off', 69],
+      ['note-off', 43],
     ])
+    expect(hits[0]).toMatchObject({
+      velocity: 0.8,
+      sourceId: 'guitar:fretboard',
+      string: 0,
+      fret: 3,
+    })
+    expect(hits[0]!.voiceId).toBe(hits[3]!.voiceId)
+    expect(hits[1]!.voiceId).toBe(hits[2]!.voiceId)
+    expect(hits[0]!.voiceId).not.toBe(hits[1]!.voiceId)
   })
 
-  it('cancels pointers exactly once and cleans all held notes', () => {
-    const emit = vi.fn()
+  it('emits note-off on cancel and creates a new ID on pointer retrigger', () => {
+    const hits: SurfaceHit[] = []
+    const interaction = new FretboardInteraction((hit) => hits.push(hit))
+    interaction.pointerDown(1, { string: 1, fret: 2 }, 47)
+    interaction.pointerDown(1, { string: 1, fret: 3 }, 48)
+    interaction.pointerCancel(1)
+    interaction.pointerCancel(1)
+
+    expect(hits.map((hit) => hit.type)).toEqual(['note-on', 'note-off', 'note-on', 'note-off'])
+    expect(hits[0]!.voiceId).toBe(hits[1]!.voiceId)
+    expect(hits[2]!.voiceId).toBe(hits[3]!.voiceId)
+    expect(hits[0]!.voiceId).not.toBe(hits[2]!.voiceId)
+  })
+
+  it('cleans all held pointers exactly once', () => {
+    const emit = vi.fn<(hit: SurfaceHit) => void>()
     const interaction = new FretboardInteraction(emit)
     interaction.pointerDown(1, { string: 1, fret: 2 }, 47)
-    interaction.pointerCancel(1)
-    interaction.pointerCancel(1)
     interaction.pointerDown(2, { string: 2, fret: 4 }, 54)
     interaction.cancelAll()
-    expect(emit.mock.calls.map((call) => (call[0] as SurfaceHit).phase)).toEqual([
-      'on',
-      'cancel',
-      'on',
-      'cancel',
+    interaction.cancelAll()
+    expect(emit.mock.calls.map(([hit]) => hit.type)).toEqual([
+      'note-on',
+      'note-on',
+      'note-off',
+      'note-off',
     ])
   })
 
-  it('normalizes keyboard activation as an on/off pair', () => {
+  it('gives each keyboard activation its own normalized voice lifecycle', () => {
     const hits: SurfaceHit[] = []
     const interaction = new FretboardInteraction((hit) => hits.push(hit))
     interaction.keyboardActivate({ string: 4, fret: 1 }, 60)
-    expect(hits).toEqual([
-      { phase: 'on', pitch: 60, string: 4, fret: 1, pointerId: 'keyboard', velocity: 1 },
-      { phase: 'off', pitch: 60, string: 4, fret: 1, pointerId: 'keyboard', velocity: 1 },
-    ])
+    interaction.keyboardActivate({ string: 4, fret: 1 }, 60)
+    expect(hits.map((hit) => hit.type)).toEqual(['note-on', 'note-off', 'note-on', 'note-off'])
+    expect(hits[0]!.voiceId).toBe(hits[1]!.voiceId)
+    expect(hits[2]!.voiceId).toBe(hits[3]!.voiceId)
+    expect(hits[0]!.voiceId).not.toBe(hits[2]!.voiceId)
   })
 
   it('suspends auto-follow for exactly three seconds after manual pan', () => {

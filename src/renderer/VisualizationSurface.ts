@@ -28,25 +28,32 @@ export type LiveVoiceSource = LiveNoteStore
  * would widen this; nothing in the contract assumes more than a number. */
 export type VisualizationHitId = number
 
+/** Instrument-neutral note lifecycle emitted by interactive surfaces. */
+export interface SurfaceHit {
+  type: 'note-on' | 'note-off'
+  pitch: number
+  velocity: number
+  sourceId: string
+  voiceId: string
+  channel?: number
+  string?: number
+  fret?: number
+}
+
 /**
  * Contract an instrument visualization surface must satisfy to be mounted
- * behind `AppServices.renderer`. `PianoRollRenderer` is the only
- * implementation today (see `PianoRollRenderer implements VisualizationSurface`
- * in `./PianoRollRenderer.ts`); this interface exists so a future surface
- * (e.g. a guitar/fretboard or LED-strip visualization) can be swapped in
- * without widening every call site's type back to the concrete piano class.
+ * behind `AppServices.renderer`. Concrete piano and guitar renderers satisfy
+ * this interface so callers can swap surfaces without widening every service
+ * back to a concrete renderer class.
  *
  * Grouped by capability rather than call order:
  *   - mount/init/teardown, frame data, live voices, resize, seek/reset,
  *     visibility, practice hints/layers, capture canvas, theme.
  *
- * `currentViewport` is a known, deliberate leak: `Viewport` describes pixel
- * geometry in piano-key terms (`pitchToX`, `pitchWidth`, `pitchAtPoint`) and
- * a handful of Learn exercises read it directly for overlay placement.
- * Generalizing it is out of scope here (no second surface exists yet to
- * design against) — it stays on the contract, documented, rather than
- * silently reintroducing a concrete `PianoRollRenderer` import at every call
- * site that needs it.
+ * `currentViewport` is an optional piano-specific compatibility leak:
+ * `Viewport` describes pixel geometry in piano-key terms (`pitchToX`,
+ * `pitchWidth`, `pitchAtPoint`). Non-piano surfaces return `undefined` and
+ * callers that host piano-only overlays must guard it.
  */
 export interface VisualizationSurface {
   // ── Mount / init / teardown ─────────────────────────────────────────
@@ -64,6 +71,8 @@ export interface VisualizationSurface {
   setLiveNotesVisible(visible: boolean): void
   /** Pitch → color of every voice currently lit, republished on change. */
   readonly activeKeys: EventSignal<ReadonlyMap<VisualizationHitId, number>>
+  /** Interactive surfaces expose note events; passive surfaces may omit it. */
+  readonly surfaceHits?: EventSignal<SurfaceHit | null>
 
   // ── Resize ───────────────────────────────────────────────────────────
   resize(width: number, height: number, resolution?: number): void
@@ -73,6 +82,9 @@ export interface VisualizationSurface {
   // Re-present the scene at a given timeline position without advancing
   // playback (scrubbing, mode re-entry, post-mutation repaint).
   renderStaticFrame(currentTime: number): void
+  renderManualFrame(time: number, dt: number): void
+  pauseAutoRender(): void
+  resumeAutoRender(): void
 
   // ── Visibility ───────────────────────────────────────────────────────
   setVisible(visible: boolean): void
@@ -93,6 +105,6 @@ export interface VisualizationSurface {
   setTheme(theme: Theme): void
   readonly currentTheme: Theme
 
-  // ── Documented piano-specific leak (see interface doc comment) ───────
-  readonly currentViewport: Viewport
+  // ── Optional piano-specific leak (see interface doc comment) ─────────
+  readonly currentViewport: Viewport | undefined
 }
