@@ -128,6 +128,19 @@ def main():
         default="689e773723bcafd8c81015b10c03f12675ce16ec",
         help="pinned xavriley/midi-transcription-models commit",
     )
+    ap.add_argument(
+        "--device",
+        default=None,
+        choices=[None, "cpu", "mps", "cuda"],
+        help="Force a torch device. Default (None) lets the package "
+        "auto-select (MPS on Apple Silicon). Pass 'cpu' to get numbers "
+        "comparable with the Basic Pitch CPU-JS-backend RTF measurements.",
+    )
+    ap.add_argument(
+        "--suffix",
+        default="",
+        help="appended to the output results filename, e.g. '-cpu'",
+    )
     args = ap.parse_args()
 
     from hf_midi_transcription import MidiTranscriptionModel
@@ -142,9 +155,9 @@ def main():
     # hf_hub_download() for exactly one file, which is what a real
     # integration should do too.
     t0 = time.time()
-    model = MidiTranscriptionModel(instrument=args.instrument)
+    model = MidiTranscriptionModel(instrument=args.instrument, device=args.device)
     model_load_s = time.time() - t0
-    print(f"model load: {model_load_s:.2f}s", flush=True)
+    print(f"model load: {model_load_s:.2f}s (device={model.device})", flush=True)
 
     subset = json.loads((ROOT / "data" / "selected-subset.json").read_text())
     per_track = []
@@ -233,13 +246,15 @@ def main():
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "instrument": args.instrument,
         "revision": args.revision,
+        "device": str(model.device),
+        "requestedDevice": args.device,
         "modelLoadSec": model_load_s,
         "peakRssKb": peak_rss_kb,
         "summary": summary,
         "perTrack": per_track,
     }
 
-    out_path = ROOT / "results" / f"results.gaps-{args.instrument}.json"
+    out_path = ROOT / "results" / f"results.gaps-{args.instrument}{args.suffix}.json"
     out_path.write_text(json.dumps(out, indent=2) + "\n")
     print(f"\nWrote {out_path.relative_to(ROOT)}")
 

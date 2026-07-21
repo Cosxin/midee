@@ -25,7 +25,7 @@ Nothing here ships in the Midee production build.
 | `scripts/measure.mjs` | Orchestrates the full run: decode → infer → score → write `results/results.<profile>.json`. |
 | `src/browserSmoke.ts` + `vite.config.ts` | Minimal real browser build (`npm run build:browser-smoke`) to measure actual bundled bytes under this repo's pinned Vite 8. |
 | `python/gaps_probe_README.md` | **M1R:** corrected — documents the real, working install/probe of `xavriley/hf_midi_transcription` + `xavriley/midi-transcription-models`, including the bugs found and fixes used. M1's original conclusion (no code/weights exist) was wrong; see this file and the docs report's Model 2 section for the full correction. |
-| `python/run_gaps_eval.py` | Real end-to-end evaluation script: loads a pinned guitar checkpoint (`guitar-gaps.pth` or `guitar-fl.pth`) via an isolated `uv` venv, runs it against the same 12-track subset/ground truth as Basic Pitch, scores with the same onset/onset+offset F1 methodology (reimplemented in Python so this script is self-contained). |
+| `python/run_gaps_eval.py` | Real end-to-end evaluation script: loads a pinned guitar checkpoint (`guitar-gaps.pth` or `guitar-fl.pth`) via an isolated `uv` venv, runs it against the same 12-track subset/ground truth as Basic Pitch, scores with the same onset/onset+offset F1 methodology (reimplemented in Python so this script is self-contained). Supports `--device {cpu,mps,cuda}` to force a torch device and `--suffix` to avoid overwriting results across devices; each device produces materially different RTF/memory (not accuracy) numbers, see docs report. |
 | `python/instruments.json` | Workaround copy of the upstream repo's instrument→checkpoint config, needed because it isn't packaged into the installed `hf-midi-transcription` distribution (see docs report Model 2, packaging bug #5). |
 | `python/.venv/` | Isolated `uv`-managed Python 3.11 virtualenv. Gitignored, never committed. |
 | `.cache/huggingface/` | Isolated `HF_HOME` for this spike's model-weight downloads. Gitignored, never committed — same policy as GuitarSet audio. |
@@ -55,9 +55,32 @@ source .venv/bin/activate
 uv pip install "git+https://github.com/xavriley/hf_midi_transcription.git@96f6797881e9497cbfc8f8e5deccea9c1f2f7adc"
 uv pip install "huggingface-hub==0.25.2"   # works around a version-skew bug, see docs report
 export HF_HOME="$(cd .. && pwd)/.cache/huggingface"
+
+# Auto-selected device (MPS on Apple Silicon) -> results/results.gaps-<instrument>.json
 python run_gaps_eval.py --instrument guitar_gaps   # or: guitar_fl
+
+# CPU-forced -> results/results.gaps-<instrument>-cpu.json (comparable to
+# Basic Pitch's CPU-JS-backend RTF; also where the ~7.3-7.7GB peak RSS
+# finding in the docs report comes from -- see --device/--suffix below)
+python run_gaps_eval.py --instrument guitar_gaps --device cpu --suffix=-cpu
+python run_gaps_eval.py --instrument guitar_fl --device cpu --suffix=-cpu
 ```
+
+`--device {cpu,mps,cuda}` forces a torch device (omit to let the package
+auto-select); `--suffix` is appended to the output filename so CPU and
+auto-selected runs don't overwrite each other. Every result JSON records
+both `device` (what actually ran) and `requestedDevice` (what was asked
+for) so this is verifiable from the artifact, not just from how you
+invoked the script.
 
 Both `fetch-subset.mjs` and the GAPS steps talk to the internet (Zenodo,
 Hugging Face). Nothing either downloads is committed; `.cache/` and
 `python/.venv/` are gitignored.
+
+**A note on comparing devices:** this machine is an Apple Silicon Mac.
+Its CPU-forced numbers are directly comparable to Basic Pitch's CPU-JS
+numbers (both CPU, same machine), but **none of these numbers are
+Raspberry Pi measurements** -- Apple M-series CPU cores are a different,
+generally faster performance class than a Pi's ARM cores. Re-measure both
+RTF and peak RSS on actual target hardware before drawing any Pi-feasibility
+conclusion.

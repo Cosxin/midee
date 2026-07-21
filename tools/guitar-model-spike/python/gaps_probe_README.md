@@ -1,9 +1,12 @@
 # GAPS / high-resolution guitar transcription — local run attempt
 
-**Status (M1R, 2026-07-21): USABLE — installed, weights loaded, real
-inference run against the 12-track GuitarSet subset. See
+**Status (M1R2, 2026-07-21): USABLE — installed, weights loaded, real
+inference run against the 12-track GuitarSet subset on both CPU-forced and
+Apple Silicon MPS. See
 `../../../docs/GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md`'s Model 2 section
-for full results and the license-provenance caveat.**
+for full results, the license-provenance caveat, and why the CPU peak
+memory finding (~7.3-7.7GB) matters more for Pi-feasibility than the RTF
+does.**
 
 > **This file previously said the opposite** ("BLOCKED — no publicly
 > released code or weights exist to run"). That was wrong. It was reached
@@ -101,19 +104,42 @@ report's Model 2 section):
 `guitar-fl.pth` (both practical to run once bug #3/#4 above were worked
 around) and evaluates each against the same 12-track GuitarSet subset and
 `.jams` ground truth as the Basic Pitch harness, using the same onset/
-onset+offset F1 methodology. Results: `results/results.gaps-guitar_gaps.json`
-and `results/results.gaps-guitar_fl.json`. Headline numbers (see docs
-report for full per-track tables and discussion):
+onset+offset F1 methodology. Each checkpoint was run twice: once with
+`--device cpu` forced (comparable to Basic Pitch's CPU-JS RTF), once with
+the package's auto-selected device (Apple Silicon **MPS** GPU on this
+machine). Results: `results/results.gaps-guitar_gaps.json` (MPS),
+`results/results.gaps-guitar_gaps-cpu.json` (CPU), and the `guitar_fl`
+equivalents. Every file records its actual `device` and `requestedDevice`.
+Headline numbers (see docs report for full per-track tables and
+discussion):
 
-| Checkpoint | Mean onset F1@50ms | Mean onset+offset F1 | Mean RTF (MPS GPU) |
-| --- | --- | --- | --- |
-| `guitar-gaps.pth` | 0.881 | 0.434 | 0.096 |
-| `guitar-fl.pth` | 0.903 | 0.674 | 0.060 |
+| Checkpoint | Mean onset F1@50ms | Mean onset+offset F1 | Mean RTF (CPU) | Mean RTF (MPS) | Peak RSS (CPU) | Peak RSS (MPS) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `guitar-gaps.pth` | 0.881 | 0.434 | 0.104 | 0.063 | ~7.68 GB | ~831 MB |
+| `guitar-fl.pth` | 0.903 | 0.674 | 0.136 | 0.062 | ~7.26 GB | ~987 MB |
 
-Both beat Basic Pitch's onset F1 (0.750) on this subset; `guitar-fl.pth`
-also beats Basic Pitch's onset+offset F1 (0.543). Both models are
-documented as **monophonic-only** and show it in their error pattern
-(false negatives dominate on GuitarSet's chord-heavy `comp` tracks).
+F1/FP/FN are identical between CPU and MPS runs for a given checkpoint
+(device doesn't change model output) -- a useful correctness check. Both
+checkpoints beat Basic Pitch's onset F1 (0.750, CPU) on this subset;
+`guitar-fl.pth` also beats Basic Pitch's onset+offset F1 (0.543). Both
+models are documented as **monophonic-only** and show it in their error
+pattern (false negatives dominate on GuitarSet's chord-heavy `comp`
+tracks).
+
+**The CPU peak-RSS numbers (~7.3-7.7GB) are the standout finding**: roughly
+9x the same checkpoint's MPS footprint, and roughly 16-17x Basic Pitch's
+~452MB. That is a concrete, measured reason for caution about
+resource-constrained deployment targets, independent of the (perfectly
+good) CPU real-time factor -- see "What remains unresolved" below for why
+this still isn't a Pi verdict.
+
+**macOS `ru_maxrss` unit note:** Python's `resource.getrusage(...).ru_maxrss`
+is bytes on macOS/BSD but KB on Linux -- `run_gaps_eval.py` divides by
+1024 once (see the inline comment at the peak-RSS computation) to
+normalize this machine's byte-valued reading into KB. This matches Node's
+`process.resourceUsage().maxRSS`, which Node documents as always
+KB-valued, so the KB units reported by the Basic Pitch (Node) and GAPS
+(Python) harnesses are consistent with each other.
 
 ## What remains unresolved (do not overclaim)
 
@@ -129,5 +155,11 @@ documented as **monophonic-only** and show it in their error pattern
   family of models would need a server-side deployment (matching Midee's
   existing Pi piano pipeline shape), not a browser one.
 - Raspberry Pi / ARM performance — not evaluated in this spike (no Pi
-  hardware here); the MPS-GPU numbers above are Apple Silicon-specific and
-  don't transfer to a Pi's CPU-only inference story.
+  hardware here). **This spike's CPU numbers are Apple Silicon Mac
+  numbers, not Pi numbers** — an Apple M-series CPU core is a different,
+  generally faster performance class than a Pi's ARM core, so neither the
+  good CPU real-time factor nor the ~7.3-7.7GB peak RSS should be assumed
+  to transfer to a Pi without separately measuring both there. If
+  anything, the memory figure is the more actionable of the two numbers
+  for a Pi-feasibility judgment, since Pi RAM (typically 4-8GB total,
+  shared with the OS) is a hard ceiling regardless of CPU speed.

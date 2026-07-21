@@ -1,6 +1,7 @@
-# Guitar transcription model evaluation (M1 spike, M1R corrections)
+# Guitar transcription model evaluation (M1 spike, M1R/M1R2 corrections)
 
-**Date:** 2026-07-21 (M1), corrected/extended 2026-07-21 (M1R)
+**Date:** 2026-07-21 (M1), corrected/extended 2026-07-21 (M1R), CPU
+benchmarks + wording fixes 2026-07-21 (M1R2)
 **Status:** Complete (non-blocking research spike)
 **Owner artifacts:** [`tools/guitar-model-spike/`](../tools/guitar-model-spike/) (isolated tooling, deterministic manifest/runner), this document.
 **Does not touch:** root `package.json`/`package-lock.json`, `src/`, or any shipped Midee code path.
@@ -18,6 +19,22 @@
 > unchanged and are reproduced here verbatim (see git history for the
 > original commit if you want a byte-for-byte diff).
 
+> **M1R2 addendum:** M1R's GAPS benchmarks ran on Apple Silicon **MPS**
+> (auto-selected), which is not comparable to Basic Pitch's CPU-JS-backend
+> RTF. This revision reruns both GAPS checkpoints with `--device cpu`
+> forced (results now apples-to-apples with Basic Pitch's CPU numbers),
+> keeps the MPS numbers alongside for reference, and surfaces a genuinely
+> important finding those CPU runs revealed: **peak memory on CPU is
+> ~7.3-7.7GB — roughly 9x the MPS figure — which matters more for
+> Pi-feasibility than the (perfectly fine) CPU real-time factor does.**
+> This revision also fixes two wording issues from M1R: it no longer calls
+> Basic Pitch "the only one... directly usable" in the same breath as
+> calling GAPS "directly usable" two bullets later (the two aren't usable
+> in the same *way* — browser-direct vs. Python/offline — see below), and
+> it replaces the "Basic Pitch has zero license ambiguity" claim with
+> narrower, evidence-backed wording about its distributed artifact's
+> license, since this spike never audited Basic Pitch's own training data.
+
 ## TL;DR
 
 None of the four candidates is "same-level" as Midee's current piano
@@ -25,29 +42,37 @@ approach (an Onsets & Velocities piano-transcription model — see
 `README.md`'s Bluetooth-audio data-flow diagram — which reaches near-studio
 note accuracy on a well-understood, decades-mature MIR task). For guitar:
 
-- **Spotify Basic Pitch (TS)** is the only one of the four that is directly
-  usable *today*: real license, real npm package, real ~900KB model,
-  installs and builds cleanly under an isolated Vite 8 project, and was
-  actually run end-to-end against 12 real GuitarSet excerpts in this spike.
-  With the correct (upstream Python) inference thresholds it reaches a
-  **0.750 mean onset F1 @ 50ms** but only **0.543 mean onset+offset F1**
-  across the 12 real tracks measured — decent onset detection, much
-  weaker sustained-note timing, and it is instrument-agnostic (not
-  guitar-specialized). Good enough to prototype against, not good enough
-  to treat as ground truth.
+- **Spotify Basic Pitch (TS)** is the only one of the four that is
+  **directly usable in the browser** *today*: real license, real npm
+  package, real ~900KB model, installs and builds cleanly under an
+  isolated Vite 8 project, and was actually run end-to-end against 12 real
+  GuitarSet excerpts in this spike. With the correct (upstream Python)
+  inference thresholds it reaches a **0.750 mean onset F1 @ 50ms** but only
+  **0.543 mean onset+offset F1** across the 12 real tracks measured —
+  decent onset detection, much weaker sustained-note timing, and it is
+  instrument-agnostic (not guitar-specialized). Good enough to prototype
+  against, not good enough to treat as ground truth.
 - **GAPS / high-resolution guitar transcription** (Xavier Riley et al.) —
-  **correction: this is now directly usable, not blocked.** A working
-  package ([`xavriley/hf_midi_transcription`](https://github.com/xavriley/hf_midi_transcription),
+  **correction: this is now directly usable offline in Python, not
+  blocked** (M1's "no artifact" finding was wrong — see Model 2). It is
+  **not** a browser candidate the way Basic Pitch is: it's a PyTorch/CRNN
+  model with no JS/WASM/ONNX export path found in this spike, so "directly
+  usable" here means *installable and runnable via `uv`/pip today*, not
+  *shippable in Midee's static Vite SPA today*. A working package
+  ([`xavriley/hf_midi_transcription`](https://github.com/xavriley/hf_midi_transcription),
   MIT) and real pretrained checkpoints
   ([`xavriley/midi-transcription-models`](https://huggingface.co/xavriley/midi-transcription-models)
   on Hugging Face, MIT model card: `guitar-gaps.pth` ~99.2MB,
   `guitar-fl.pth` ~98.9MB, `guitar_kroma.safetensors` ~49.4MB) exist and
-  were installed and loaded in this spike via an isolated `uv` environment.
-  It is **monophonic-only** (explicitly documented upstream — not a
-  polyphonic competitor to Basic Pitch), and the underlying GAPS
-  *training* dataset has a **license discrepancy that still blocks a
-  confident commercial-use claim** — see Model 2 below and the Risks
-  section. See measured results below for what was actually run.
+  were installed, loaded, and benchmarked in this spike via an isolated
+  `uv` environment — on both Apple Silicon GPU (MPS) and CPU-forced. It is
+  **monophonic-only** (explicitly documented upstream — not a polyphonic
+  competitor to Basic Pitch), CPU inference used **~7.3-7.7GB peak RSS**
+  despite a good real-time factor (this is an Apple Silicon Mac, *not* a
+  Raspberry Pi measurement — see Model 2), and the underlying GAPS/François
+  Leduc *training* datasets both have **license discrepancies that still
+  block a confident commercial-use claim** — see Model 2 below and the
+  Risks section. See measured results below for what was actually run.
 - **GuitarMidi-LV2** is a hobbyist LV2 plugin with real, if narrow,
   functionality (documented, self-reported low latency) but unverified on
   Raspberry Pi/ARM in this spike (no Pi hardware available) and has
@@ -185,9 +210,16 @@ package code** via the pure-JS `@tensorflow/tfjs` **CPU** backend in plain
 Node (no `@tensorflow/tfjs-node` native binary — its postinstall pulls a
 ~100MB+ prebuilt TensorFlow C library, also impractical at this bandwidth).
 This is disclosed explicitly because it changes what the RTF number means:
-the CPU JS backend is *slower* than a real browser's WebGL/WASM backend
-would be, so the measured RTF below is a **conservative (pessimistic)
-bound** on in-browser performance, not an optimistic one. Audio decode used
+the numbers below are a **CPU-JS-backend measured baseline**, not a
+browser measurement — this spike did not actually run Basic Pitch through
+a browser's WebGL or WASM backend (that would need a real or headless
+browser, which the bandwidth constraint above also ruled out), so it
+cannot verify the common assumption that WebGL/WASM would be faster. tfjs's
+CPU backend is generally the slowest of its three backends, which makes
+this baseline *directionally likely* to be pessimistic relative to a real
+browser — but that is an expectation carried over from tfjs's general
+architecture, not something measured in this spike, and it should be
+treated as an assumption to verify, not a proven bound. Audio decode used
 a from-scratch 16-bit PCM WAV reader + linear resampler to 22050Hz mono (no
 Web Audio API / native decode dependency needed, since
 `BasicPitch.evaluateModel()` accepts a plain `Float32Array` directly).
@@ -222,7 +254,7 @@ same defaults as the upstream Python CLI:
 | --- | --- |
 | Mean onset F1 @ 50ms | **0.750** |
 | Mean onset+offset F1 | **0.543** |
-| Mean real-time factor | **0.605** (CPU JS backend — conservative/pessimistic bound; see note above) |
+| Mean real-time factor | **0.605** (CPU JS backend, measured baseline — not a browser measurement; see note above) |
 | Total false positives (onset-only) | 649 |
 | Total false negatives (onset-only) | 492 |
 | Peak process RSS (whole 12-track run) | ~452 MB (`452448` KB, Node v25.9.0, darwin/arm64) |
@@ -389,84 +421,141 @@ has `{onset_time, offset_time, midi_note, velocity}` per note, no MIDI
 re-parsing needed) and the exact same greedy nearest-onset F1 methodology
 as the Node/Basic Pitch harness (re-implemented in Python for a
 self-contained script; same 50ms onset tolerance, same
-`max(50ms, 0.2×duration)` offset tolerance). Inference ran on this
-machine's Apple Silicon **MPS** GPU backend (auto-selected by the
-package — `torch.backends.mps.is_available()` — not something this spike
-configured manually), using the package's own default thresholds
-(`onset_threshold=0.3`, `offset_threshold=0.3`, `frame_threshold=0.1`, no
-tuning applied).
+`max(50ms, 0.2×duration)` offset tolerance), using the package's own
+default thresholds (`onset_threshold=0.3`, `offset_threshold=0.3`,
+`frame_threshold=0.1`, no tuning applied).
 
-**`guitar-gaps.pth` (the default `--instrument guitar` checkpoint):**
+**Each checkpoint was run twice — once with `--device cpu` forced
+explicitly, and once letting the package auto-select (Apple Silicon
+**MPS** GPU on this machine).** The coordinator correctly flagged that an
+MPS-only RTF is not comparable to Basic Pitch's CPU-JS-backend RTF; the
+CPU-forced runs below *are* apples-to-apples with Basic Pitch's CPU
+measurements. Both device runs used the same cached weights and produced
+**identical F1/precision/recall/FP/FN per track** (verified against both
+regenerated result JSONs below) — device only changes speed and memory,
+not model output, which is a useful correctness sanity check in itself.
+Every `results/results.gaps-*.json` file now records both `"device"` (what
+actually ran) and `"requestedDevice"` (what was asked for, `null` when
+auto-selected) so this is self-evident from the artifact, not just this
+prose.
 
-| Track | Style | RTF | Onset F1@50ms | Onset+Offset F1 | GT notes | Pred notes | FP | FN |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `00_SS1-68-E_comp` | comp | 0.455 | 0.863 | 0.241 | 189 | 168 | 14 | 35 |
-| `00_BN1-129-Eb_solo` | solo | 0.070 | 0.942 | 0.609 | 71 | 67 | 2 | 6 |
-| `01_BN2-166-Ab_comp` | comp | 0.053 | 0.749 | 0.292 | 260 | 274 | 74 | 60 |
-| `01_Jazz1-130-D_solo` | solo | 0.056 | 0.940 | 0.597 | 68 | 66 | 3 | 5 |
-| `02_Rock3-148-C_comp` | comp | 0.048 | 0.691 | 0.366 | 435 | 329 | 65 | 171 |
-| `02_SS1-100-C#_solo` | solo | 0.042 | 0.957 | 0.615 | 59 | 58 | 2 | 3 |
-| `03_Jazz1-200-B_comp` | comp | 0.119 | 0.921 | 0.121 | 82 | 83 | 7 | 6 |
-| `03_Jazz2-110-Bb_solo` | solo | 0.058 | 0.934 | 0.599 | 99 | 98 | 6 | 7 |
-| `04_SS3-98-C_comp` | comp | 0.040 | 0.776 | 0.311 | 268 | 188 | 11 | 91 |
-| `04_Jazz1-200-B_solo` | solo | 0.079 | 0.884 | 0.543 | 65 | 64 | 7 | 8 |
-| `05_SS1-68-E_comp` | comp | 0.073 | 0.973 | 0.226 | 143 | 149 | 7 | 1 |
-| `05_Rock2-85-F_solo` | solo | 0.065 | 0.940 | 0.691 | 125 | 124 | 7 | 8 |
+**A critical caveat that applies to every number in this subsection: this
+machine is an Apple Silicon Mac, not a Raspberry Pi.** Apple's M-series
+CPU cores are architecturally a different performance class from a
+Raspberry Pi's Cortex-A76-family ARM cores — commonly several times faster
+per core on this kind of workload — and this spike has no Pi hardware to
+measure against (see Model 3's GuitarMidi-LV2 discussion for the same
+caveat applied there). **A good CPU real-time factor on an M-series Mac
+does not imply a good real-time factor on a Pi, and it does not overcome
+the memory finding below.** Treat every RTF number in this section as an
+Apple-Silicon-CPU baseline, and every memory number as a hard floor that a
+resource-constrained device would also have to clear — Pi CPU/RTF and Pi
+memory availability both remain **unverified** in this spike.
 
-| Metric | Value |
-| --- | --- |
-| Mean onset F1 @ 50ms | **0.881** — higher than Basic Pitch's 0.750 |
-| Mean onset+offset F1 | **0.434** — lower than Basic Pitch's 0.543 |
-| Mean real-time factor | **0.096** (MPS GPU — not a CPU-vs-CPU comparison with Basic Pitch's 0.605 CPU-JS number; both are real, neither is apples-to-apples hardware) |
-| Total false positives (onset-only) | 205 (vs. Basic Pitch's 649) |
-| Total false negatives (onset-only) | 401 (vs. Basic Pitch's 492) |
-| Model load time | 4.66s (first call; downloads+caches the 99MB checkpoint if not already cached) |
-| Peak process RSS (whole 12-track run) | ~812 MB (`831872` KB) — torch + MPS backend, notably heavier than Basic Pitch's ~452MB tfjs-CPU run |
+**Memory unit note:** Python's `resource.getrusage(...).ru_maxrss` reports
+in **bytes on macOS/BSD** but in **kilobytes on Linux** — a well-known
+cross-platform gotcha in the stdlib `resource` module. `run_gaps_eval.py`
+divides by 1024 once (`ru_maxrss / 1024`, see the inline comment in the
+script) to normalize this machine's byte-valued reading into the
+`peakRssKb` field it writes — correct for macOS, and worth re-checking if
+this script is ever run on a Linux/Pi host, where dividing again would be
+wrong. This is the same unit (KB) the Node/Basic Pitch harness reports via
+`process.resourceUsage().maxRSS`, which Node documents as always KB
+regardless of platform — so the KB figures in this document are
+consistent between the two toolchains.
 
-**Reading this honestly:** onset F1 is genuinely better than Basic Pitch's
-on this subset, *including* on chord-heavy `comp` tracks the model isn't
-architecturally built for (e.g. `05_SS1-68-E_comp` scored 0.973) — the
-monophonic design evidently still captures a useful subset of onsets
-(likely the most prominent/salient note per chord) rather than failing
-outright on polyphonic input. But **onset+offset F1 is worse than Basic
-Pitch's**, and false negatives dominate the error breakdown on the densest
-comp tracks (`02_Rock3-148-C_comp`: 171 FN out of 435 ground-truth notes;
-`04_SS3-98-C_comp`: 91 FN out of 268) — consistent with a model that
-picks one note where GuitarSet's ground truth has several simultaneous
-ones. **Solo tracks are where this model is strongest** (mean onset F1
-≈0.93, mean onset+offset F1 ≈0.61 across the 6 solo tracks above),
-which lines up exactly with its documented monophonic design intent.
+**`guitar-gaps.pth` (the default `--instrument guitar` checkpoint) — CPU-forced (`results.gaps-guitar_gaps-cpu.json`, comparable to Basic Pitch):**
+
+| Track | Style | RTF (CPU) | RTF (MPS) | Onset F1@50ms | Onset+Offset F1 | GT notes | Pred notes | FP | FN |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `00_SS1-68-E_comp` | comp | 0.269 | 0.093 | 0.863 | 0.241 | 189 | 168 | 14 | 35 |
+| `00_BN1-129-Eb_solo` | solo | 0.088 | 0.061 | 0.942 | 0.609 | 71 | 67 | 2 | 6 |
+| `01_BN2-166-Ab_comp` | comp | 0.072 | 0.055 | 0.749 | 0.292 | 260 | 274 | 74 | 60 |
+| `01_Jazz1-130-D_solo` | solo | 0.077 | 0.057 | 0.940 | 0.597 | 68 | 66 | 3 | 5 |
+| `02_Rock3-148-C_comp` | comp | 0.068 | 0.048 | 0.691 | 0.366 | 435 | 329 | 65 | 171 |
+| `02_SS1-100-C#_solo` | solo | 0.062 | 0.043 | 0.957 | 0.615 | 59 | 58 | 2 | 3 |
+| `03_Jazz1-200-B_comp` | comp | 0.094 | 0.083 | 0.921 | 0.121 | 82 | 83 | 7 | 6 |
+| `03_Jazz2-110-Bb_solo` | solo | 0.113 | 0.051 | 0.934 | 0.599 | 99 | 98 | 6 | 7 |
+| `04_SS3-98-C_comp` | comp | 0.072 | 0.041 | 0.776 | 0.311 | 268 | 188 | 11 | 91 |
+| `04_Jazz1-200-B_solo` | solo | 0.106 | 0.079 | 0.884 | 0.543 | 65 | 64 | 7 | 8 |
+| `05_SS1-68-E_comp` | comp | 0.132 | 0.073 | 0.973 | 0.226 | 143 | 149 | 7 | 1 |
+| `05_Rock2-85-F_solo` | solo | 0.092 | 0.067 | 0.940 | 0.691 | 125 | 124 | 7 | 8 |
+
+| Metric | CPU (comparable to Basic Pitch) | MPS (Apple GPU, reference only) |
+| --- | --- | --- |
+| Mean onset F1 @ 50ms | **0.881** — higher than Basic Pitch's 0.750 | 0.881 (identical — device doesn't change output) |
+| Mean onset+offset F1 | **0.434** — lower than Basic Pitch's 0.543 | 0.434 |
+| Mean real-time factor | **0.104** — still faster-than-real-time, and faster than Basic Pitch's 0.605 CPU-JS number, *on this Apple Silicon Mac; not a Pi measurement* | 0.063 |
+| Total false positives (onset-only) | 205 (vs. Basic Pitch's 649) | 205 |
+| Total false negatives (onset-only) | 401 (vs. Basic Pitch's 492) | 401 |
+| Model load time | 0.88s (checkpoint already cached; first-ever download adds the 99MB fetch time) | 1.33s |
+| **Peak process RSS (whole 12-track run)** | **~7.68 GB** (`7864256` KB) | ~831 MB (`850752` KB) |
+
+**The memory gap between CPU and MPS is the single most important number
+in this section.** ~7.68GB peak RSS on CPU is roughly **9x** the ~831MB
+MPS figure, and roughly **17x** Basic Pitch's ~452MB — this spike does not
+have a verified explanation for the gap (plausible unverified hypotheses:
+CPU-path intermediate tensor/activation buffers not needed when compute is
+offloaded to the GPU, or Apple's unified-memory MPS allocator not
+attributing all GPU-resident memory to process RSS the way CPU heap
+allocations are attributed — neither confirmed here). **This is the number
+that should drive any Pi-feasibility judgment, not the RTF**: a Raspberry
+Pi 4/5 tops out at 8GB RAM shared with the OS and everything else running
+on it, so a ~7.68GB peak footprint for guitar transcription alone would be
+a real, likely-blocking constraint on typical Pi hardware — independent of
+whether the (unmeasured) Pi CPU could keep up in wall-clock time at all.
+
+**Reading the accuracy numbers honestly:** onset F1 is genuinely better
+than Basic Pitch's on this subset, *including* on chord-heavy `comp`
+tracks the model isn't architecturally built for (e.g. `05_SS1-68-E_comp`
+scored 0.973) — the monophonic design evidently still captures a useful
+subset of onsets (likely the most prominent/salient note per chord) rather
+than failing outright on polyphonic input. But **onset+offset F1 is worse
+than Basic Pitch's**, and false negatives dominate the error breakdown on
+the densest comp tracks (`02_Rock3-148-C_comp`: 171 FN out of 435
+ground-truth notes; `04_SS3-98-C_comp`: 91 FN out of 268) — consistent
+with a model that picks one note where GuitarSet's ground truth has
+several simultaneous ones. **Solo tracks are where this model is
+strongest** (mean onset F1 ≈0.93, mean onset+offset F1 ≈0.61 across the 6
+solo tracks above), which lines up exactly with its documented monophonic
+design intent.
 
 **`guitar-fl.pth` (trained on the separate "Francois Leduc dataset," per
 `instruments.json`) — run because it was practical (already cached from
-the interrupted snapshot download above), and the result was surprising
-enough to be worth reporting prominently:**
+the interrupted snapshot download discussed above), and the result was
+surprising enough to be worth reporting prominently. CPU-forced
+(`results.gaps-guitar_fl-cpu.json`) and MPS (`results.gaps-guitar_fl.json`):**
 
-| Track | Style | RTF | Onset F1@50ms | Onset+Offset F1 | GT notes | Pred notes | FP | FN |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `00_SS1-68-E_comp` | comp | 0.087 | 0.864 | 0.453 | 189 | 186 | 24 | 27 |
-| `00_BN1-129-Eb_solo` | solo | 0.057 | 0.921 | 0.633 | 71 | 68 | 4 | 7 |
-| `01_BN2-166-Ab_comp` | comp | 0.053 | 0.842 | 0.623 | 260 | 279 | 52 | 33 |
-| `01_Jazz1-130-D_solo` | solo | 0.055 | 0.978 | 0.847 | 68 | 69 | 2 | 1 |
-| `02_Rock3-148-C_comp` | comp | 0.047 | 0.797 | 0.539 | 435 | 388 | 60 | 107 |
-| `02_SS1-100-C#_solo` | solo | 0.043 | 0.917 | 0.833 | 59 | 61 | 6 | 4 |
-| `03_Jazz1-200-B_comp` | comp | 0.079 | 0.945 | 0.479 | 82 | 81 | 4 | 5 |
-| `03_Jazz2-110-Bb_solo` | solo | 0.047 | 0.954 | 0.913 | 99 | 96 | 3 | 6 |
-| `04_SS3-98-C_comp` | comp | 0.040 | 0.785 | 0.522 | 268 | 226 | 32 | 74 |
-| `04_Jazz1-200-B_solo` | solo | 0.078 | 0.908 | 0.769 | 65 | 65 | 6 | 6 |
-| `05_SS1-68-E_comp` | comp | 0.071 | 0.976 | 0.602 | 143 | 146 | 5 | 2 |
-| `05_Rock2-85-F_solo` | solo | 0.064 | 0.948 | 0.869 | 125 | 126 | 7 | 6 |
+| Track | Style | RTF (CPU) | RTF (MPS) | Onset F1@50ms | Onset+Offset F1 | GT notes | Pred notes | FP | FN |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `00_SS1-68-E_comp` | comp | 0.217 | 0.080 | 0.864 | 0.453 | 189 | 186 | 24 | 27 |
+| `00_BN1-129-Eb_solo` | solo | 0.146 | 0.059 | 0.921 | 0.633 | 71 | 68 | 4 | 7 |
+| `01_BN2-166-Ab_comp` | comp | 0.077 | 0.055 | 0.842 | 0.623 | 260 | 279 | 52 | 33 |
+| `01_Jazz1-130-D_solo` | solo | 0.076 | 0.057 | 0.978 | 0.847 | 68 | 69 | 2 | 1 |
+| `02_Rock3-148-C_comp` | comp | 0.065 | 0.049 | 0.797 | 0.539 | 435 | 388 | 60 | 107 |
+| `02_SS1-100-C#_solo` | solo | 0.060 | 0.044 | 0.917 | 0.833 | 59 | 61 | 6 | 4 |
+| `03_Jazz1-200-B_comp` | comp | 0.104 | 0.083 | 0.945 | 0.479 | 82 | 81 | 4 | 5 |
+| `03_Jazz2-110-Bb_solo` | solo | 0.210 | 0.048 | 0.954 | 0.913 | 99 | 96 | 3 | 6 |
+| `04_SS3-98-C_comp` | comp | 0.099 | 0.041 | 0.785 | 0.522 | 268 | 226 | 32 | 74 |
+| `04_Jazz1-200-B_solo` | solo | 0.120 | 0.080 | 0.908 | 0.769 | 65 | 65 | 6 | 6 |
+| `05_SS1-68-E_comp` | comp | 0.253 | 0.075 | 0.976 | 0.602 | 143 | 146 | 5 | 2 |
+| `05_Rock2-85-F_solo` | solo | 0.208 | 0.066 | 0.948 | 0.869 | 125 | 126 | 7 | 6 |
 
-| Metric | Value |
-| --- | --- |
-| Mean onset F1 @ 50ms | **0.903** — best of all three models tested in this spike |
-| Mean onset+offset F1 | **0.674** — best of all three models tested in this spike, and well above Basic Pitch's 0.543 |
-| Mean real-time factor | **0.060** (MPS GPU) |
-| Total false positives (onset-only) | 205 |
-| Total false negatives (onset-only) | 278 |
-| Peak process RSS | ~920 MB (`942144` KB) |
+| Metric | CPU (comparable to Basic Pitch) | MPS (Apple GPU, reference only) |
+| --- | --- | --- |
+| Mean onset F1 @ 50ms | **0.903** — best of all three models tested, on both devices | 0.903 (identical) |
+| Mean onset+offset F1 | **0.674** — best of all three models tested, and well above Basic Pitch's 0.543 | 0.674 |
+| Mean real-time factor | **0.136** — still faster-than-real-time on this Apple Silicon Mac; not a Pi measurement | 0.062 |
+| Total false positives (onset-only) | 205 | 205 |
+| Total false negatives (onset-only) | 278 | 278 |
+| Model load time | 0.74s (cached) | 0.99s |
+| **Peak process RSS** | **~7.26 GB** (`7431744` KB) | ~987 MB (`1010720` KB) |
 
-**This is a genuinely surprising result worth stating plainly:
+Same pattern as `guitar-gaps.pth`: strong accuracy and acceptable RTF on
+this machine's CPU, but a **~7.3GB peak memory footprint that is the real
+constraint for any resource-limited deployment target**, not the speed.
+
+**This is a genuinely surprising accuracy result worth stating plainly:
 `guitar-fl.pth` outperformed `guitar-gaps.pth` on both metrics on this
 GuitarSet subset**, despite `guitar-gaps` being the package's *documented
 default* for `--instrument guitar` and the one named in this task's
@@ -556,14 +645,16 @@ as the same content.
 
 | | Basic Pitch (TS) | GAPS / high-res guitar | GuitarMidi-LV2 | FretNet |
 | --- | --- | --- | --- | --- |
-| Direct-use status | **Usable, validated** | **Usable, validated** (monophonic only; license provenance unresolved) | Usable (Linux/LV2 host), Pi unverified | Research-only, no weights |
-| License | Apache-2.0 | Code: MIT-intended (README + classifier; **no LICENSE file present**). Weights repo: MIT (HF model card). Training-data (GAPS dataset) license: **discrepant** — CC BY-NC-SA 4.0 on Zenodo v1 vs. MIT on HF v1.1, see below. | LGPL-2.0-or-later | MIT (code); no weights to license |
+| Direct-use status | **Usable, validated — browser-direct** (npm-installable, builds under Vite 8, Apache-2.0) | **Usable, validated — Python/offline only** (`uv`/pip-installable, no browser path found; monophonic; license provenance unresolved) | Usable (Linux/LV2 host), Pi unverified | Research-only, no weights |
+| License | Apache-2.0 (npm package + repo) | Code: MIT-intended (README + classifier; **no LICENSE file present**). Weights repo: MIT (HF model card). Training-data (GAPS dataset) license: **discrepant** — CC BY-NC-SA 4.0 on Zenodo v1 vs. MIT on HF v1.1, see below. François Leduc dataset (used by `guitar-fl.pth`) has its own separate, sharper discrepancy — see Model 2. | LGPL-2.0-or-later | MIT (code); no weights to license |
 | Output | Pitch-only note events (+ optional pitch bend) | Pitch-only note events (onset/offset/velocity), **monophonic** | Pitch-only MIDI note on/off, fixed velocity | Pitch + string/fret (architecture only) |
 | Onset F1 @ 50ms (this spike, 12-track subset) | **0.750 mean** (upstream thresholds) | **0.881 mean** (`guitar-gaps.pth`) / **0.903 mean** (`guitar-fl.pth`, best of all three) | not measured (no Pi/Linux host here) | not run (no weights) |
 | Onset+offset F1 (this spike) | **0.543 mean** (upstream thresholds) | **0.434 mean** (`guitar-gaps.pth`) / **0.674 mean** (`guitar-fl.pth`, best of all three) | not measured | not run |
-| Real-time factor | **0.605 mean** (CPU JS backend, conservative) | **0.096 mean** (`guitar-gaps.pth`) / **0.060 mean** (`guitar-fl.pth`), both MPS GPU — not directly comparable to Basic Pitch's CPU number | author-reported 4-16ms latency, unverified hardware | n/a |
+| Real-time factor (CPU, apples-to-apples) | **0.605 mean** (CPU JS backend, Node/tfjs, Apple Silicon Mac) | **0.104 mean** (`guitar-gaps.pth`) / **0.136 mean** (`guitar-fl.pth`), CPU-forced, same Apple Silicon Mac — faster than Basic Pitch here, but **not a Raspberry Pi measurement for either model** | author-reported 4-16ms latency, unverified hardware | n/a |
+| Real-time factor (GPU/accelerated, not comparable across rows) | Not measured (no browser WebGL/WASM run in this spike) | 0.063 mean (`guitar-gaps.pth`) / 0.062 mean (`guitar-fl.pth`), Apple **MPS** GPU | n/a | n/a |
+| **Peak process memory (this spike's measurements)** | **~452 MB** (Node/tfjs CPU backend) | **~7.3-7.7 GB on CPU** (torch CPU) / **~831 MB-1.0 GB on MPS** (torch MPS) — the CPU figure is the real constraint for any memory-limited target, roughly 16-17x Basic Pitch's footprint | Not measured | n/a |
 | Browser packaging | **Confirmed** (Vite 8 build succeeds; asset-copy caveat noted) | Not evaluated — PyTorch/CRNN, Python-only today; no JS/WASM/ONNX export found in either repo. Would need a server-side (Pi-style) deployment like Midee's existing piano pipeline, not a browser one. | n/a (native LV2 plugin, not browser) | n/a |
-| Pi packaging | Not evaluated (would mirror existing PipeWire server-side pattern) | Not evaluated in this spike (no Pi/ARM hardware here); architecture (CRNN + torch) matches the same *class* of model Midee already runs server-side for piano, so a Pi port is plausible but unverified — do not treat as proven. | **Unverified** on this spike's hardware | n/a |
+| Pi packaging | Not evaluated (would mirror existing PipeWire server-side pattern) | **Unverified**, and the CPU memory figure above is a specific, concrete reason for caution: ~7.3-7.7GB peak RSS would be a tight-to-blocking fit on typical 4-8GB Pi RAM even before accounting for OS/other-process overhead, independent of whatever the (unmeasured) Pi CPU's real-time factor turns out to be. | **Unverified** on this spike's hardware | n/a |
 
 ## Conclusion
 
@@ -581,17 +672,29 @@ wins on onset+offset F1 (0.674 vs. Basic Pitch's 0.543). That is a real,
 measured accuracy edge, not a marginal one.
 
 It does not, however, make either checkpoint a drop-in replacement for
-Midee's piano model: both are monophonic-only by design (GuitarSet's
-`comp` tracks, which are chord-heavy, are structurally outside what
-they're built to do — reflected in their false-negative-heavy error
-pattern on `comp` tracks above), and **both checkpoints' training data has
-an unresolved license discrepancy** (GAPS: CC BY-NC-SA 4.0 on Zenodo vs.
-MIT on HF for what's described as the same dataset; François Leduc
-dataset: restricted/no-license on Zenodo, described as derived from a
-third party's *commercial, purchasable* transcription product, vs. MIT on
-a newer HF mirror). Neither of those two things is true of Midee's current
-piano model, which is why neither GAPS checkpoint is "same-level" despite
-outperforming Basic Pitch numerically.
+Midee's piano model, for three independent reasons, none of which are true
+of Midee's current piano model:
+
+1. **Monophonic-only by design** — GuitarSet's `comp` tracks, which are
+   chord-heavy, are structurally outside what either checkpoint is built
+   to do, reflected in their false-negative-heavy error pattern on `comp`
+   tracks above.
+2. **Both checkpoints' training data has an unresolved license
+   discrepancy** (GAPS: CC BY-NC-SA 4.0 on Zenodo vs. MIT on HF for what's
+   described as the same dataset; François Leduc dataset: restricted/
+   no-license on Zenodo, described as derived from a third party's
+   *commercial, purchasable* transcription product, vs. MIT on a newer HF
+   mirror).
+3. **No browser path today, and a CPU memory floor that would need
+   confirming on real target hardware before any deployment claim.** This
+   is a PyTorch/CRNN model with no found JS/WASM/ONNX export — it would
+   need a server-side deployment (like Midee's existing Pi piano pipeline)
+   rather than running in the browser the way Basic Pitch does, and its
+   measured **~7.3-7.7GB CPU peak RSS on this Apple Silicon Mac** is a
+   concrete, specific reason for caution about resource-constrained
+   targets like a Raspberry Pi — a good CPU real-time factor on this
+   machine does not overcome that memory footprint, and neither the RTF
+   nor the memory footprint have been measured on Pi hardware.
 
 **Practical recommendation:** if this model family is pursued for a real
 guitar-mode spike, (1) get written license confirmation from Xavier Riley
@@ -599,13 +702,28 @@ guitar-mode spike, (1) get written license confirmation from Xavier Riley
 checkpoint's output in a shipped feature, (2) default to `guitar-fl.pth`
 over the package's documented default `guitar-gaps.pth` given its measured
 edge here, (3) treat both as solo/monophonic-only — pair with a separate
-polyphonic fallback (Basic Pitch, license-clean, already validated) for
-comped/strummed content, and (4) don't use `.from_pretrained()`, use the
-plain constructor with `hf_hub_download` underneath (see install notes).
-**Basic Pitch remains the only candidate with zero license ambiguity**
-(Apache-2.0, code and no separate training-data question because Spotify
-trained and shipped it directly) and is the safer default for a first
-shippable experiment even though it scored lower on this benchmark.
+polyphonic fallback for comped/strummed content, (4) don't use
+`.from_pretrained()`, use the plain constructor with `hf_hub_download`
+underneath (see install notes), and (5) measure real Pi CPU RTF and peak
+RSS before treating a Pi deployment as feasible — this spike's ~7.3-7.7GB
+figure is an Apple Silicon number, not a Pi one, and Pi ARM cores are a
+meaningfully slower class of hardware than this spike's measurements
+reflect.
+
+Of the two *directly usable* candidates, they're not really substitutes
+for each other: **Basic Pitch is the clearer choice specifically for a
+browser-embedded, license-simple first experiment** — its distributed
+artifact (the npm package, Apache-2.0) has no separate training-data
+question the way GAPS/François Leduc do, because Spotify trained and
+shipped it as one unit under one license; that is a narrower, more
+defensible claim than "zero license ambiguity" in any absolute sense
+— no independent audit of Basic Pitch's own training data was performed in
+this spike, and generally-trained instrument-agnostic models are not
+immune to the same category of question, this spike simply didn't
+encounter one for it. **GAPS's checkpoints are the clearer choice if the
+target is Python/server-side and the measured accuracy edge matters more
+than immediate browser-readiness** — but only once the license and
+Pi-hardware questions above are actually resolved, not assumed.
 
 **All four candidates' relevant output (where an output exists at all) is
 pitch/note-level**, which is exactly what Midee's ergonomic mapper already
@@ -653,6 +771,17 @@ findings on those two are unchanged by this correction.
   integration plan that assumes GAPS can handle strummed/comped guitar
   (the majority of real guitar playing, per GuitarSet's own 50/50
   comp/solo split) will fail by design, not by bug.
+- **CPU memory / Pi-feasibility risk (new in this revision):** both GAPS
+  checkpoints measured **~7.3-7.7GB peak process RSS** on CPU on this
+  spike's Apple Silicon Mac — roughly 9x their own MPS-GPU footprint and
+  roughly 16-17x Basic Pitch's ~452MB. This is a specific, measured number,
+  not a guess, and it is a plausible hard blocker for Raspberry Pi-class
+  hardware (typically 4-8GB total RAM) independent of CPU speed. **Neither
+  the memory footprint nor the real-time factor have been measured on
+  actual Pi hardware in this spike** — an Apple M-series CPU core is not
+  representative of a Pi's ARM Cortex-A-class core, so do not extrapolate
+  this spike's good CPU real-time factors to a Pi without separately
+  measuring both RTF and peak RSS there.
 - **Accuracy risk:** Basic Pitch's measured onset+offset F1 is
   substantially lower than onset-only F1 across every profile tested here
   — sustained-note timing (not just onset detection) is the weaker link,
@@ -694,7 +823,19 @@ isolated `uv`-managed Python 3.11 virtualenv
 checkpoints, with `hf-midi-transcription` installed from the pinned git
 commit above and `huggingface-hub` pinned to `0.25.2` (see the version-skew
 note in Model 2). See `tools/guitar-model-spike/README.md` for exact
-reproduction steps for both.
+reproduction steps for both, including the CPU-forced commands used for
+the memory/RTF numbers in this revision:
+
+```bash
+python run_gaps_eval.py --instrument guitar_gaps --device cpu --suffix=-cpu
+python run_gaps_eval.py --instrument guitar_fl --device cpu --suffix=-cpu
+```
+
+(Omit `--device` to let the package auto-select MPS on Apple Silicon, as
+the non-`-cpu`-suffixed `results/results.gaps-*.json` files did.) Every
+`results/results.gaps-*.json` file records the actual `device` used and
+the `requestedDevice` argument, so which run produced which numbers is
+verifiable from the artifact itself, not just this document's prose.
 
 Pinned upstream revisions:
 
@@ -706,8 +847,10 @@ Pinned upstream revisions:
 | xavriley/piano_transcription_inference (fork, git dependency) | `7568dc7f78b625e40cf9776e2806d164006610e3` |
 | xavriley/midi-transcription-models (HF model repo) | `689e773723bcafd8c81015b10c03f12675ce16ec` |
 | xavriley/GAPS (HF dataset repo, referenced not downloaded) | `b4c89a33a639c7ae903e74102dfbb3e147e1417f` |
+| xavriley/FrancoisLeducGuitarDataset (HF dataset repo, referenced not downloaded) | `a38306c244b3ea81496ad58b4514622185e58211` |
 | xavriley/HighResolutionGuitarTranscription (paper companion site only, superseded as "the" GAPS pointer by the above) | `c82d461c38ae951840c97095b2b47d21ba5f12e9` |
 | geraldmwangi/GuitarMidi-LV2 | `153327048989bffd3b623572eb5ddd0bc261b526` |
 | cwitkowitz/guitar-transcription-continuous (FretNet) | `d481054f54184374c04b1cc27a487dc35c87f353` |
 | GuitarSet v1.1 (Zenodo, evaluation benchmark — unchanged from M1) | record 3371780, `annotation.zip` sha256 `8daa02e6417ccca1685feb44b135e95928ad7037e5032ecb326b5791856fda99` |
 | GAPS dataset (Zenodo, training data for guitar-gaps.pth, license reference only) | record 13962272, CC BY-NC-SA 4.0, `gaps_v1_no_audio.zip` |
+| François Leduc Dataset (Zenodo, training data for guitar-fl.pth, license reference only) | record 10984521, access-restricted, no open license |
