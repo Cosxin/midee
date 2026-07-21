@@ -7,6 +7,9 @@ export interface RoutedNoteEvent {
   velocity: number
   clockTime: number
   source: InputSource
+  sourceId?: string
+  channel?: number
+  voiceId?: string
   /** True while any pedal source (MIDI or keyboard) is held. */
   pedalDown: boolean
 }
@@ -26,6 +29,7 @@ export interface LivePerformanceBus {
   readonly pedalDown: boolean
   /** Pitches currently held by the sustain pedal. Read-only. */
   readonly sustainedPitches: ReadonlySet<number>
+  readonly sustainedVoiceIds: ReadonlySet<string>
 
   subscribeNotes(onNoteOn: NoteSink, onNoteOff: NoteSink): () => void
   subscribePedal(sink: PedalSink): () => void
@@ -54,7 +58,17 @@ export function createLivePerformanceBus(): LivePerformanceBus {
     touch: false,
     pi: false,
   }
-  const sustainedPitches = new Set<number>()
+  const sustainedVoices = new Map<string, RoutedNoteEvent>()
+
+  function voiceKey(evt: BusNoteEvent): string {
+    return (
+      evt.voiceId ?? `legacy:${evt.source}:${evt.sourceId ?? ''}:${evt.channel ?? ''}:${evt.pitch}`
+    )
+  }
+
+  function route(evt: BusNoteEvent, pedalDown: boolean): RoutedNoteEvent {
+    return { ...evt, pedalDown }
+  }
 
   function recomputePedal(): boolean {
     return (
@@ -71,7 +85,11 @@ export function createLivePerformanceBus(): LivePerformanceBus {
     },
 
     get sustainedPitches(): ReadonlySet<number> {
-      return sustainedPitches
+      return new Set(Array.from(sustainedVoices.values(), (event) => event.pitch))
+    },
+
+    get sustainedVoiceIds(): ReadonlySet<string> {
+      return new Set(sustainedVoices.keys())
     },
 
     subscribeNotes(onNoteOn: NoteSink, onNoteOff: NoteSink): () => void {
@@ -93,44 +111,26 @@ export function createLivePerformanceBus(): LivePerformanceBus {
     routeNoteOn(evt: BusNoteEvent): void {
       // Repress-release: if a pitch was pedal-sustained, emit note-off first
       // so subscribers don't see overlapping note-ons.
-      if (sustainedPitches.has(evt.pitch)) {
+      const key = voiceKey(evt)
+      const sustained = sustainedVoices.get(key)
+      if (sustained) {
         for (const fn of noteOffSinks) {
-          fn({
-            pitch: evt.pitch,
-            velocity: 0,
-            clockTime: evt.clockTime,
-            source: evt.source,
-            pedalDown: _pedalDown,
-          })
+          fn({ ...sustained, velocity: 0, clockTime: evt.clockTime, pedalDown: _pedalDown })
         }
-        sustainedPitches.delete(evt.pitch)
+        sustainedVoices.delete(key)
       }
 
-      for (const fn of noteOnSinks) {
-        fn({
-          pitch: evt.pitch,
-          velocity: evt.velocity,
-          clockTime: evt.clockTime,
-          source: evt.source,
-          pedalDown: _pedalDown,
-        })
-      }
+      for (const fn of noteOnSinks) fn(route(evt, _pedalDown))
     },
 
     routeNoteOff(evt: BusNoteEvent): void {
       if (_pedalDown) {
-        sustainedPitches.add(evt.pitch)
+        sustainedVoices.set(voiceKey(evt), route(evt, _pedalDown))
         return
       }
 
       for (const fn of noteOffSinks) {
-        fn({
-          pitch: evt.pitch,
-          velocity: evt.velocity,
-          clockTime: evt.clockTime,
-          source: evt.source,
-          pedalDown: _pedalDown,
-        })
+        fn(route(evt, _pedalDown))
       }
     },
 
@@ -152,12 +152,12 @@ export function createLivePerformanceBus(): LivePerformanceBus {
         // event time. Subscribers that care about clockTime should use
         // their own clock.currentTime; this value is a clear signal that
         // the timestamp is synthetic.
-        for (const pitch of sustainedPitches) {
+        for (const event of sustainedVoices.values()) {
           for (const fn of noteOffSinks) {
-            fn({ pitch, velocity: 0, clockTime: -1, source: 'midi', pedalDown: false })
+            fn({ ...event, velocity: 0, clockTime: -1, pedalDown: false })
           }
         }
-        sustainedPitches.clear()
+        sustainedVoices.clear()
         for (const fn of pedalSinks) fn(false)
       }
     },
@@ -167,17 +167,18 @@ export function createLivePerformanceBus(): LivePerformanceBus {
       pedalSourceDown.midi = false
       pedalSourceDown.keyboard = false
       pedalSourceDown.touch = false
+      pedalSourceDown.pi = false
       _pedalDown = false
 
       if (wasDown) {
-        for (const pitch of sustainedPitches) {
+        for (const event of sustainedVoices.values()) {
           for (const fn of noteOffSinks) {
-            fn({ pitch, velocity: 0, clockTime, source: 'midi', pedalDown: false })
+            fn({ ...event, velocity: 0, clockTime, pedalDown: false })
           }
         }
         for (const fn of pedalSinks) fn(false)
       }
-      sustainedPitches.clear()
+      sustainedVoices.clear()
     },
   }
 }

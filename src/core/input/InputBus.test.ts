@@ -34,6 +34,29 @@ describe('InputBus', () => {
     expect(received).toEqual([{ pitch: 60, velocity: 0, clockTime: 2.5, source: 'keyboard' }])
   })
 
+  it('preserves optional source, channel, and voice identity without requiring it', () => {
+    const bus = new InputBus()
+    const received: BusNoteEvent[] = []
+    bus.noteOn.subscribe((event) => event && received.push(event))
+    bus.emitNoteOn(
+      {
+        ...noteEvent(60),
+        sourceId: 'device-a',
+        channel: 3,
+        voiceId: 'device-a:1',
+      },
+      'midi',
+    )
+
+    expect(received[0]).toMatchObject({
+      pitch: 60,
+      source: 'midi',
+      sourceId: 'device-a',
+      channel: 3,
+      voiceId: 'device-a:1',
+    })
+  })
+
   it('fans out pedal events to every subscriber', () => {
     const bus = new InputBus()
     const a: BusPedalEvent[] = []

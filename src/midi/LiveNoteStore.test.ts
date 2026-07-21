@@ -36,6 +36,18 @@ describe('LiveNoteStore', () => {
     expect(store.releasedNotes[0]).toMatchObject({ startTime: 1, endTime: 3, velocity: 0.5 })
   })
 
+  it('keeps equal pitches with distinct voice identities active independently', () => {
+    const store = new LiveNoteStore()
+    store.press(60, 0.7, 1, { sourceId: 'a', channel: 0, voiceId: 'voice-a' })
+    store.press(60, 0.8, 2, { sourceId: 'b', channel: 1, voiceId: 'voice-b' })
+
+    expect(store.heldVoices.size).toBe(2)
+    expect(store.heldNotes.size).toBe(1) // compatibility pitch projection
+    store.releaseVoice('voice-a', 3)
+    expect(store.heldVoices.has('voice-b')).toBe(true)
+    expect(store.releasedNotes[0]).toMatchObject({ voiceId: 'voice-a', sourceId: 'a', channel: 0 })
+  })
+
   it('clamps endTime to be no earlier than startTime', () => {
     const store = new LiveNoteStore()
     store.press(67, 1, 5)

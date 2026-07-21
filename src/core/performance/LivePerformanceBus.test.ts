@@ -56,6 +56,35 @@ describe('LivePerformanceBus', () => {
     expect(offs).toEqual([60, 64])
   })
 
+  it('keeps sustained equal pitches distinct by voice across channels and sources', () => {
+    const bus = createLivePerformanceBus()
+    const offs: string[] = []
+    bus.subscribeNotes(
+      () => {},
+      (event) => offs.push(event.voiceId ?? ''),
+    )
+    bus.routePedalDown('midi')
+    bus.routeNoteOff({
+      ...makeNoteOff(60),
+      source: 'midi',
+      sourceId: 'a',
+      channel: 0,
+      voiceId: 'a-0',
+    })
+    bus.routeNoteOff({
+      ...makeNoteOff(60),
+      source: 'midi',
+      sourceId: 'b',
+      channel: 1,
+      voiceId: 'b-1',
+    })
+
+    expect(bus.sustainedPitches).toEqual(new Set([60]))
+    expect(bus.sustainedVoiceIds).toEqual(new Set(['a-0', 'b-1']))
+    bus.routePedalUp('midi')
+    expect(offs).toEqual(['a-0', 'b-1'])
+  })
+
   it('pedal merge: OR of MIDI and keyboard sources', () => {
     const bus = createLivePerformanceBus()
 
