@@ -6,6 +6,7 @@ import {
   type GuitarVoice,
   LiveGuitarFingering,
   precomputeGuitarFingerings,
+  STANDARD_GUITAR_DP_STATE_LIMIT,
   STANDARD_GUITAR_PROFILE,
 } from '.'
 
@@ -67,6 +68,23 @@ describe('assignGuitarCluster', () => {
     const result = assignGuitarCluster([40, 45, 50, 55, 59, 64, 67].map((pitch) => voice(pitch)))
     expect(result.voices.filter((note) => note.supported)).toHaveLength(6)
     expect(result.voices.filter((note) => !note.supported)).toHaveLength(1)
+  })
+
+  it('bounds dense duplicate search by guitar state rather than voice permutations', () => {
+    const denseVoices = Array.from({ length: 20 }, (_, index) => ({
+      ...voice(64),
+      voiceId: `voice-${index}`,
+      sourceId: 'stress-fixture',
+    }))
+    const first = assignGuitarCluster(denseVoices)
+    const second = assignGuitarCluster(denseVoices)
+    const assigned = first.voices.filter((note) => note.supported)
+
+    expect(STANDARD_GUITAR_DP_STATE_LIMIT).toBe(19_264)
+    expect(assigned).toHaveLength(6)
+    expect(new Set(assigned.map((note) => note.position?.string))).toHaveLength(6)
+    expect(first).toEqual(second)
+    expect(first.voices[0]).toMatchObject({ voiceId: 'voice-0', sourceId: 'stress-fixture' })
   })
 
   it('returns an explicit unsupported result for impossible notes', () => {

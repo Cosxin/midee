@@ -14,10 +14,16 @@ export interface FingeringState {
   readonly affinityByChannel: ReadonlyMap<number, number>
 }
 
-interface SearchResult {
+interface SearchState {
   positions: readonly (GuitarPosition | null)[]
-  score: readonly number[]
+  usedStrings: number
+  minFret: number
+  maxFret: number
 }
+
+// For standard tuning a layer is bounded by 64 string masks multiplied by
+// the empty range plus every possible non-open [min, max] pair within frets 1..24.
+export const STANDARD_GUITAR_DP_STATE_LIMIT = 64 * (1 + (24 * 25) / 2)
 
 const EMPTY_STATE: FingeringState = {
   previousByVoice: new Map(),
@@ -70,30 +76,61 @@ export function assignGuitarCluster(
   state: FingeringState = EMPTY_STATE,
   profile: GuitarProfile = STANDARD_GUITAR_PROFILE,
 ): GuitarClusterAssignment {
-  let best: SearchResult | undefined
-  const positions: (GuitarPosition | null)[] = Array.from({ length: voices.length }, () => null)
+  let states = new Map<string, SearchState>([
+    ['0:0:0', { positions: [], usedStrings: 0, minFret: 0, maxFret: 0 }],
+  ])
 
-  const visit = (voiceIndex: number, usedStrings: number): void => {
-    if (voiceIndex === voices.length) {
-      const score = scorePositions(voices, positions, state)
-      if (!best || compareScore(score, best.score) < 0) {
-        best = { positions: positions.slice(), score }
-      }
-      return
+  const retainBetter = (next: Map<string, SearchState>, candidate: SearchState): void => {
+    const key = `${candidate.usedStrings}:${candidate.minFret}:${candidate.maxFret}`
+    const incumbent = next.get(key)
+    if (
+      !incumbent ||
+      compareScore(
+        scorePositions(voices, candidate.positions, state),
+        scorePositions(voices, incumbent.positions, state),
+      ) < 0
+    ) {
+      next.set(key, candidate)
     }
-
-    for (const candidate of candidatePositions(voices[voiceIndex]!.pitch, profile)) {
-      const stringBit = 1 << candidate.string
-      if ((usedStrings & stringBit) !== 0) continue
-      positions[voiceIndex] = candidate
-      visit(voiceIndex + 1, usedStrings | stringBit)
-    }
-    positions[voiceIndex] = null
-    visit(voiceIndex + 1, usedStrings)
   }
 
-  visit(0, 0)
-  const selected = best?.positions ?? positions
+  for (let voiceIndex = 0; voiceIndex < voices.length; voiceIndex++) {
+    const next = new Map<string, SearchState>()
+    for (const partial of states.values()) {
+      retainBetter(next, { ...partial, positions: [...partial.positions, null] })
+      for (const position of candidatePositions(voices[voiceIndex]!.pitch, profile)) {
+        const stringBit = 1 << position.string
+        if ((partial.usedStrings & stringBit) !== 0) continue
+        const hasFrettedPosition = partial.maxFret > 0
+        retainBetter(next, {
+          positions: [...partial.positions, position],
+          usedStrings: partial.usedStrings | stringBit,
+          minFret:
+            position.fret === 0
+              ? partial.minFret
+              : hasFrettedPosition
+                ? Math.min(partial.minFret, position.fret)
+                : position.fret,
+          maxFret: Math.max(partial.maxFret, position.fret),
+        })
+      }
+    }
+    states = next
+  }
+
+  let best: SearchState | undefined
+  for (const candidate of states.values()) {
+    if (
+      !best ||
+      compareScore(
+        scorePositions(voices, candidate.positions, state),
+        scorePositions(voices, best.positions, state),
+      ) < 0
+    ) {
+      best = candidate
+    }
+  }
+  const selected = best?.positions ?? []
   const assignedVoices: AssignedGuitarVoice[] = voices.map((voice, index) => ({
     ...voice,
     position: selected[index] ?? null,

@@ -1,4 +1,4 @@
-export type VisualizationMode = 'piano-roll' | 'guitar'
+export type VisualizationMode = 'piano' | 'guitar'
 
 export interface GuitarString {
   /** Zero-based, ordered from the lowest-pitched string. */
@@ -15,6 +15,8 @@ export interface GuitarVoice {
   pitch: number
   time: number
   channel?: number
+  voiceId?: string
+  sourceId?: string
 }
 
 export interface GuitarPosition {
