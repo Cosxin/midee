@@ -1,0 +1,567 @@
+import { Application, Container, Graphics, Rectangle, Text, TextStyle, type Ticker } from 'pixi.js'
+import type { MasterClock } from '../core/clock/MasterClock'
+import type { MidiFile } from '../core/midi/types'
+import type { LiveNoteStore } from '../midi/LiveNoteStore'
+import type { RenderLayer } from '../renderer/RenderLayer'
+import { darkTheme, getTrackColor, type Theme } from '../renderer/theme'
+import type {
+  LiveVoiceSource,
+  VisualizationFrameSource,
+  VisualizationHitId,
+  VisualizationSurface,
+} from '../renderer/VisualizationSurface'
+import { Viewport } from '../renderer/viewport'
+import type { EventSignal } from '../store/eventSignal'
+import { createEventSignal } from '../store/eventSignal'
+import { FretboardInteraction, type SurfaceHit } from './FretboardInteraction'
+import { assignGuitarCluster, precomputeGuitarFingerings } from './fingering'
+import {
+  centeredPanForFret,
+  createGuitarLayout,
+  FRET_MARKERS,
+  FRETBOARD_LABEL_WIDTH,
+  fretboardStringY,
+  GUITAR_MAX_FRET,
+  GUITAR_STRING_COUNT,
+  guitarPositionLabel,
+  highwayLaneX,
+  pitchAtPosition,
+  positionAtPoint,
+  positionRect,
+} from './GuitarGeometry'
+import { candidatePositions } from './profile'
+import type { AssignedGuitarVoice, GuitarClusterAssignment, GuitarPosition } from './types'
+
+const HIGHWAY_SECONDS = 2.4
+const STRING_NAMES = ['Low E', 'A', 'D', 'G', 'B', 'High E'] as const
+
+interface PointerGesture {
+  startX: number
+  lastX: number
+  startedOnNote: boolean
+  panning: boolean
+}
+
+/** Pixi guitar visualization; app-level selection and audio routing are intentionally external. */
+export class GuitarSurface implements VisualizationSurface {
+  readonly activeKeys = createEventSignal<ReadonlyMap<VisualizationHitId, number>>(new Map())
+  readonly surfaceHits: EventSignal<SurfaceHit | null> = createEventSignal<SurfaceHit | null>(null)
+
+  private app!: Application
+  private viewport!: Viewport
+  private scene!: Container
+  private graphics!: Graphics
+  private labels!: Container
+  private accessibleTargets!: Container
+  private accessiblePanX = Number.NaN
+  private layout = createGuitarLayout(1, 1)
+  private theme: Theme = darkTheme
+  private midi: MidiFile | null = null
+  private assignments: GuitarClusterAssignment[] = []
+  private liveStore: LiveNoteStore | null = null
+  private loopStore: LiveNoteStore | null = null
+  private liveStoreUnsub: (() => void) | null = null
+  private loopStoreUnsub: (() => void) | null = null
+  private clockUnsub: (() => void) | null = null
+  private lastTime = 0
+  private panX = 0
+  private practicePending: ReadonlySet<number> | null = null
+  private practiceAccepted: ReadonlySet<number> | null = null
+  private practiceTrackIds: Set<string> | null = null
+  private liveNotesVisible = true
+  private layers: RenderLayer[] = []
+  private gestures = new Map<number, PointerGesture>()
+  private interaction = new FretboardInteraction((hit) => this.surfaceHits.set(hit))
+
+  async init(canvas: HTMLCanvasElement): Promise<void> {
+    this.app = new Application()
+    await this.app.init({
+      canvas,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: this.theme.background,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    })
+    this.scene = new Container()
+    this.graphics = new Graphics()
+    this.labels = new Container()
+    this.accessibleTargets = new Container()
+    this.scene.addChild(this.graphics, this.labels, this.accessibleTargets)
+    this.app.stage.addChild(this.scene)
+    this.viewport = new Viewport({
+      canvasWidth: this.app.screen.width,
+      canvasHeight: this.app.screen.height,
+      keyboardHeight: 0,
+      pixelsPerSecond: 200,
+    })
+    this.bindCanvasEvents()
+    this.resize(window.innerWidth, window.innerHeight)
+    window.addEventListener('resize', this.handleResize)
+  }
+
+  attachClock(clock: MasterClock): void {
+    this.app.ticker.add((ticker: Ticker) =>
+      this.renderFrame(clock.currentTime, ticker.deltaMS / 1000),
+    )
+    this.clockUnsub = clock.subscribe(() => this.renderStaticFrame(clock.currentTime))
+  }
+
+  loadMidi(source: VisualizationFrameSource): void {
+    this.midi = source
+    const voices = source.tracks.flatMap((track) =>
+      track.notes.map((note) => ({
+        pitch: note.pitch,
+        time: note.time,
+        channel: track.channel,
+        sourceId: track.id,
+      })),
+    )
+    this.assignments = precomputeGuitarFingerings(voices)
+    this.renderStaticFrame(0)
+  }
+
+  clearMidi(): void {
+    this.midi = null
+    this.assignments = []
+    this.interaction.cancelAll()
+    this.renderStaticFrame(0)
+  }
+
+  setLiveNoteStore(store: LiveVoiceSource): void {
+    this.liveStoreUnsub?.()
+    this.liveStore = store
+    this.liveStoreUnsub = store.onChange(() => this.renderStaticFrame(this.lastTime))
+  }
+
+  setLoopNoteStore(store: LiveVoiceSource | null): void {
+    this.loopStoreUnsub?.()
+    this.loopStore = store
+    this.loopStoreUnsub = store?.onChange(() => this.renderStaticFrame(this.lastTime)) ?? null
+  }
+
+  setLiveNotesVisible(visible: boolean): void {
+    this.liveNotesVisible = visible
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  resize(width: number, height: number, resolution?: number): void {
+    if (resolution !== undefined) this.app.renderer.resolution = resolution
+    this.app.renderer.resize(width, height)
+    this.layout = createGuitarLayout(width, height)
+    this.panX = Math.min(this.panX, this.layout.maxPan)
+    this.viewport.update({ canvasWidth: width, canvasHeight: height })
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  renderStaticFrame(currentTime: number): void {
+    this.renderFrame(currentTime, 0)
+    this.app.renderer.render(this.app.stage)
+  }
+
+  setVisible(visible: boolean): void {
+    this.app.stage.visible = visible
+    this.app.canvas.style.visibility = visible ? '' : 'hidden'
+    if (!visible) this.interaction.cancelAll()
+    if (visible) this.renderStaticFrame(this.lastTime)
+  }
+
+  setPracticeHints(
+    pending: ReadonlySet<VisualizationHitId> | null,
+    accepted: ReadonlySet<VisualizationHitId> | null,
+  ): void {
+    this.practicePending = pending
+    this.practiceAccepted = accepted
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  setPracticeTrackFocus(trackIds: Iterable<string> | null): void {
+    this.practiceTrackIds = trackIds ? new Set(trackIds) : null
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  addLayer(layer: RenderLayer): void {
+    if (this.layers.includes(layer)) return
+    this.layers.push(layer)
+    this.layers.sort((a, b) => a.zIndex - b.zIndex)
+    layer.mount(this.app.stage)
+    layer.rebuild?.({ viewport: this.viewport, theme: this.theme, time: this.lastTime, dt: 0 })
+  }
+
+  removeLayer(layer: RenderLayer): void {
+    const index = this.layers.indexOf(layer)
+    if (index < 0) return
+    this.layers.splice(index, 1)
+    layer.unmount()
+  }
+
+  setTheme(theme: Theme): void {
+    this.theme = theme
+    this.app.renderer.background.color = theme.background
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  get currentTheme(): Theme {
+    return this.theme
+  }
+
+  get currentViewport(): Viewport {
+    return this.viewport
+  }
+
+  get canvas(): HTMLCanvasElement {
+    return this.app.canvas as HTMLCanvasElement
+  }
+
+  get canvasSize(): { width: number; height: number; resolution: number } {
+    return {
+      width: this.app.canvas.width,
+      height: this.app.canvas.height,
+      resolution: this.app.renderer.resolution,
+    }
+  }
+
+  destroy(): void {
+    window.removeEventListener('resize', this.handleResize)
+    this.unbindCanvasEvents()
+    this.interaction.cancelAll()
+    this.liveStoreUnsub?.()
+    this.loopStoreUnsub?.()
+    this.clockUnsub?.()
+    for (const layer of this.layers) layer.unmount()
+    this.layers = []
+    this.app.destroy(false, { children: true })
+  }
+
+  private renderFrame(currentTime: number, dt: number): void {
+    this.lastTime = currentTime
+    const active = this.collectActive(currentTime)
+    const follow = active.find((voice) => voice.position)?.position
+    if (follow && this.interaction.canAutoFollow(performance.now())) {
+      this.panX = centeredPanForFret(follow.fret, this.layout)
+    }
+    this.draw(active, currentTime)
+    for (const layer of this.layers) {
+      layer.update?.({ viewport: this.viewport, theme: this.theme, time: currentTime, dt })
+    }
+  }
+
+  private collectActive(currentTime: number): AssignedGuitarVoice[] {
+    const scheduled: AssignedGuitarVoice[] = []
+    for (const cluster of this.assignments) {
+      if (cluster.time > currentTime) break
+      for (const voice of cluster.voices) {
+        const duration = this.durationForVoice(voice)
+        if (currentTime < voice.time + duration) scheduled.push(voice)
+      }
+    }
+    if (!this.liveNotesVisible) return scheduled
+    const liveVoices = [this.liveStore, this.loopStore].flatMap((store) =>
+      store
+        ? Array.from(store.heldVoices.values(), (note) => ({
+            pitch: note.pitch,
+            time: note.startTime,
+            voiceId: note.voiceId,
+            ...(note.channel !== undefined ? { channel: note.channel } : {}),
+            ...(note.sourceId !== undefined ? { sourceId: note.sourceId } : {}),
+          }))
+        : [],
+    )
+    return [...scheduled, ...assignGuitarCluster(liveVoices).voices]
+  }
+
+  private durationForVoice(voice: AssignedGuitarVoice): number {
+    const track = this.midi?.tracks.find((candidate) => candidate.id === voice.sourceId)
+    const note = track?.notes.find(
+      (candidate) => candidate.pitch === voice.pitch && candidate.time === voice.time,
+    )
+    return note?.duration ?? 0
+  }
+
+  private draw(active: readonly AssignedGuitarVoice[], currentTime: number): void {
+    const g = this.graphics
+    g.clear()
+    this.labels.removeChildren().forEach((child) => {
+      child.destroy()
+    })
+    this.drawHighway(g, currentTime)
+    this.drawFretboard(g)
+
+    const colors = new Map<number, number>()
+    let unsupportedRow = 0
+    for (const voice of active) {
+      const color = this.colorForVoice(voice)
+      colors.set(voice.pitch, color)
+      if (voice.position) this.drawActivePosition(g, voice.position, color)
+      else this.drawUnsupported(g, voice, color, unsupportedRow++)
+    }
+    this.drawPracticeHints(g, active)
+    this.activeKeys.set(colors)
+  }
+
+  private drawHighway(g: Graphics, currentTime: number): void {
+    g.rect(0, 0, this.layout.width, this.layout.highwayHeight).fill({
+      color: this.theme.background,
+    })
+    for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
+      const x = highwayLaneX(string, this.layout)
+      g.moveTo(x, 28)
+        .lineTo(x, this.layout.highwayHeight)
+        .stroke({
+          color: this.theme.whiteKey,
+          alpha: 0.22,
+          width: 1 + string * 0.18,
+        })
+      this.addText(STRING_NAMES[string]!, x, 14, 11, 0.7, 0.5)
+    }
+    const nowY = this.layout.highwayHeight - 12
+    g.moveTo(0, nowY).lineTo(this.layout.width, nowY).stroke({
+      color: this.theme.nowLine,
+      alpha: this.theme.nowLineAlpha,
+      width: 2,
+    })
+    for (const cluster of this.assignments) {
+      const delta = cluster.time - currentTime
+      if (delta < 0 || delta > HIGHWAY_SECONDS) continue
+      for (const voice of cluster.voices) {
+        const y = nowY - (delta / HIGHWAY_SECONDS) * Math.max(1, nowY - 34)
+        if (!voice.position) {
+          this.drawUnsupported(g, voice, this.colorForVoice(voice), 0, y)
+          continue
+        }
+        const x = highwayLaneX(voice.position.string, this.layout)
+        g.circle(x, y, 7).fill({ color: this.colorForVoice(voice), alpha: 0.88 })
+        this.addText(String(voice.position.fret), x, y, 9, 1, 0.5)
+      }
+    }
+  }
+
+  private drawFretboard(g: Graphics): void {
+    g.rect(0, this.layout.fretboardTop, this.layout.width, this.layout.fretboardHeight).fill({
+      color: this.theme.blackKey,
+      alpha: 0.92,
+    })
+    for (let fret = 0; fret <= GUITAR_MAX_FRET; fret++) {
+      const x = FRETBOARD_LABEL_WIDTH + fret * this.layout.fretWidth - this.panX
+      if (x + this.layout.fretWidth < FRETBOARD_LABEL_WIDTH || x > this.layout.width) continue
+      g.moveTo(x, this.layout.fretboardTop)
+        .lineTo(x, this.layout.height)
+        .stroke({ color: this.theme.keyBorder, alpha: 0.85, width: fret === 0 ? 3 : 1 })
+      if (fret === 0 || FRET_MARKERS.has(fret)) {
+        this.addText(String(fret), x + this.layout.fretWidth / 2, this.layout.fretboardTop + 10, 10)
+      }
+    }
+    for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
+      const y = fretboardStringY(string, this.layout)
+      g.moveTo(FRETBOARD_LABEL_WIDTH, y)
+        .lineTo(this.layout.width, y)
+        .stroke({ color: this.theme.whiteKey, alpha: 0.5, width: 1 + string * 0.22 })
+      this.addText(STRING_NAMES[string]!, FRETBOARD_LABEL_WIDTH / 2, y, 10, 0.8)
+    }
+    g.rect(0, this.layout.fretboardTop, FRETBOARD_LABEL_WIDTH, this.layout.fretboardHeight).fill({
+      color: this.theme.background,
+      alpha: 0.96,
+    })
+    if (this.accessiblePanX !== this.panX) this.buildAccessibleTargets()
+  }
+
+  private buildAccessibleTargets(): void {
+    this.accessiblePanX = this.panX
+    this.accessibleTargets.removeChildren().forEach((child) => {
+      child.destroy()
+    })
+    for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
+      for (let fret = 0; fret <= GUITAR_MAX_FRET; fret++) {
+        const position = { string, fret }
+        const rect = positionRect(position, this.layout, this.panX)
+        if (rect.x + rect.width < FRETBOARD_LABEL_WIDTH || rect.x > this.layout.width) continue
+        const target = new Container()
+        target.position.set(rect.x, rect.y)
+        target.hitArea = new Rectangle(0, 0, rect.width, rect.height)
+        target.eventMode = 'static'
+        target.accessible = true
+        target.accessibleType = 'button'
+        target.accessibleTitle = guitarPositionLabel(position)
+        target.accessibleHint = 'Press Enter or Space to play this note'
+        target.tabIndex = 0
+        target.on('keydown', (event: KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            this.interaction.keyboardActivate(position, pitchAtPosition(position))
+          }
+        })
+        this.accessibleTargets.addChild(target)
+      }
+    }
+  }
+
+  private drawPracticeHints(g: Graphics, active: readonly AssignedGuitarVoice[]): void {
+    const activePitches = new Set(active.map((voice) => voice.pitch))
+    for (const [pitches, accepted] of [
+      [this.practicePending, false],
+      [this.practiceAccepted, true],
+    ] as const) {
+      if (!pitches) continue
+      for (const pitch of pitches) {
+        if (activePitches.has(pitch)) continue
+        const position = candidatePositions(pitch)[0]
+        if (!position) {
+          this.drawUnsupported(
+            g,
+            { pitch, time: this.lastTime, position: null, supported: false },
+            this.theme.trackColors[0] ?? this.theme.nowLine,
+            0,
+          )
+          continue
+        }
+        const rect = positionRect(position, this.layout, this.panX)
+        if (rect.x + rect.width < FRETBOARD_LABEL_WIDTH || rect.x > this.layout.width) continue
+        g.roundRect(rect.x + 6, rect.y + 6, rect.width - 12, rect.height - 12, 8)
+          .fill({
+            color: accepted
+              ? this.theme.nowLine
+              : (this.theme.trackColors[0] ?? this.theme.nowLine),
+            alpha: accepted ? 0.48 : 0.28,
+          })
+          .stroke({ color: this.theme.nowLine, alpha: 0.65, width: 2 })
+      }
+    }
+  }
+
+  private drawActivePosition(g: Graphics, position: GuitarPosition, color: number): void {
+    const rect = positionRect(position, this.layout, this.panX)
+    if (rect.x + rect.width < FRETBOARD_LABEL_WIDTH || rect.x > this.layout.width) return
+    const hintPitch = pitchAtPosition(position)
+    const pending = this.practicePending?.has(hintPitch) ?? false
+    const accepted = this.practiceAccepted?.has(hintPitch) ?? false
+    g.roundRect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8, 8).fill({
+      color: accepted ? this.theme.nowLine : color,
+      alpha: pending ? 0.58 : 0.92,
+    })
+    this.addText(String(position.fret), rect.x + rect.width / 2, rect.y + rect.height / 2, 12)
+  }
+
+  private drawUnsupported(
+    g: Graphics,
+    voice: AssignedGuitarVoice,
+    color: number,
+    row: number,
+    y = 18,
+  ): void {
+    const railX = this.layout.width - 14
+    const railY = Math.min(this.layout.highwayHeight - 18, y + row * 18)
+    g.circle(railX, railY, 6).fill({ color, alpha: 0.7 })
+    g.moveTo(railX - 4, railY - 4)
+      .lineTo(railX + 4, railY + 4)
+      .stroke({ color: 0xffffff })
+    this.addText(`!${voice.pitch}`, railX - 22, railY, 9, 0.9, 1)
+  }
+
+  private colorForVoice(voice: AssignedGuitarVoice): number {
+    const track = this.midi?.tracks.find((candidate) => candidate.id === voice.sourceId)
+    if (track && (!this.practiceTrackIds || this.practiceTrackIds.has(track.id))) {
+      return getTrackColor(track, this.theme)
+    }
+    return this.theme.trackColors[0] ?? this.theme.nowLine
+  }
+
+  private addText(
+    text: string,
+    x: number,
+    y: number,
+    size: number,
+    alpha = 0.85,
+    anchor = 0.5,
+  ): void {
+    const label = new Text({
+      text,
+      style: new TextStyle({
+        fill: this.theme.whiteKey,
+        fontFamily: 'Inter, sans-serif',
+        fontSize: size,
+      }),
+    })
+    label.anchor.set(anchor)
+    label.position.set(x, y)
+    label.alpha = alpha
+    this.labels.addChild(label)
+  }
+
+  private bindCanvasEvents(): void {
+    const canvas = this.app.canvas
+    canvas.style.touchAction = 'pan-y'
+    canvas.addEventListener('pointerdown', this.onPointerDown)
+    canvas.addEventListener('pointermove', this.onPointerMove)
+    canvas.addEventListener('pointerup', this.onPointerUp)
+    canvas.addEventListener('pointercancel', this.onPointerCancel)
+    canvas.addEventListener('wheel', this.onWheel, { passive: false })
+  }
+
+  private unbindCanvasEvents(): void {
+    const canvas = this.app.canvas
+    canvas.removeEventListener('pointerdown', this.onPointerDown)
+    canvas.removeEventListener('pointermove', this.onPointerMove)
+    canvas.removeEventListener('pointerup', this.onPointerUp)
+    canvas.removeEventListener('pointercancel', this.onPointerCancel)
+    canvas.removeEventListener('wheel', this.onWheel)
+  }
+
+  private localPoint(event: PointerEvent): { x: number; y: number } {
+    const rect = this.app.canvas.getBoundingClientRect()
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+  }
+
+  private onPointerDown = (event: PointerEvent): void => {
+    const point = this.localPoint(event)
+    const position = positionAtPoint(point.x, point.y, this.layout, this.panX)
+    this.gestures.set(event.pointerId, {
+      startX: point.x,
+      lastX: point.x,
+      startedOnNote: position !== null,
+      panning: false,
+    })
+    this.app.canvas.setPointerCapture?.(event.pointerId)
+    if (position) this.interaction.pointerDown(event.pointerId, position, pitchAtPosition(position))
+  }
+
+  private onPointerMove = (event: PointerEvent): void => {
+    const gesture = this.gestures.get(event.pointerId)
+    if (!gesture) return
+    const point = this.localPoint(event)
+    if (!gesture.panning && Math.abs(point.x - gesture.startX) >= 8) {
+      gesture.panning = true
+      if (gesture.startedOnNote) this.interaction.pointerCancel(event.pointerId)
+    }
+    if (!gesture.panning) return
+    this.panX = Math.max(0, Math.min(this.layout.maxPan, this.panX - (point.x - gesture.lastX)))
+    gesture.lastX = point.x
+    this.interaction.noteManualPan(performance.now())
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  private onPointerUp = (event: PointerEvent): void => {
+    const gesture = this.gestures.get(event.pointerId)
+    this.gestures.delete(event.pointerId)
+    if (gesture?.startedOnNote && !gesture.panning) this.interaction.pointerUp(event.pointerId)
+  }
+
+  private onPointerCancel = (event: PointerEvent): void => {
+    this.gestures.delete(event.pointerId)
+    this.interaction.pointerCancel(event.pointerId)
+  }
+
+  private onWheel = (event: WheelEvent): void => {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) && !event.shiftKey) return
+    event.preventDefault()
+    const delta = event.deltaX || event.deltaY
+    this.panX = Math.max(0, Math.min(this.layout.maxPan, this.panX + delta))
+    this.interaction.noteManualPan(performance.now())
+    this.renderStaticFrame(this.lastTime)
+  }
+
+  private handleResize = (): void => this.resize(window.innerWidth, window.innerHeight)
+}
+
+// Kept exported for focused event tests without booting WebGL.
+export type { SurfaceHit } from './FretboardInteraction'
