@@ -56,6 +56,27 @@ describe('LivePerformanceBus', () => {
     expect(offs).toEqual([60, 64])
   })
 
+  it('treats a guitar-sourced note-on/off like any other input source', () => {
+    // Guitar has no pedal of its own, but its note events must flow through
+    // the same fan-out as MIDI/keyboard — no special-cased source list to
+    // fall through.
+    const bus = createLivePerformanceBus()
+    const ons: string[] = []
+    bus.subscribeNotes(
+      (e) => ons.push(`${e.source}:${e.pitch}`),
+      () => {},
+    )
+    bus.routeNoteOn({
+      pitch: 45,
+      velocity: 0.8,
+      clockTime: 1,
+      source: 'guitar',
+      sourceId: 'guitar:fretboard',
+      voiceId: 'guitar:fretboard:pointer-1:1',
+    })
+    expect(ons).toEqual(['guitar:45'])
+  })
+
   it('keeps sustained equal pitches distinct by voice across channels and sources', () => {
     const bus = createLivePerformanceBus()
     const offs: string[] = []

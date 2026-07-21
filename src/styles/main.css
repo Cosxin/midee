@@ -82,13 +82,22 @@ body {
   min-height: 100vh;
 }
 
-#pianoroll {
+#pianoroll,
+#guitar-surface {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   /* The pixi canvas handles its own gestures — disable browser-native
      panning/zooming so touch events reach the renderer cleanly. */
   touch-action: none;
+}
+
+/* Guitar-mode chrome: the keyboard-height drag seam only applies to the
+   piano surface. */
+body.visualization-guitar #kbd-resizer {
+  display: none;
 }
 
 #ui-overlay {

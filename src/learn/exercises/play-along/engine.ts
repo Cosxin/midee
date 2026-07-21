@@ -3,11 +3,25 @@ import { createStore, type SetStoreFunction } from 'solid-js/store'
 import type { BusNoteEvent } from '../../../core/input/InputBus'
 import type { MidiFile } from '../../../core/midi/types'
 import type { AppServices } from '../../../core/services'
+import { candidatePositions } from '../../../guitar/profile'
+import type { VisualizationMode } from '../../../guitar/types'
 import { watch } from '../../../store/watch'
 import type { LearnState } from '../../core/LearnState'
 import { classifyArticulation } from '../../core/scoring'
 import { type LoopRegion, makeRegionFromBars, ramp, wrapIfAtEnd } from '../../engines/LoopRegion'
 import { PracticeEngine } from '../../engines/PracticeEngine'
+
+// Guitar Play-Along requirement: a pitch outside standard tuning's fretboard
+// range stays audible/visible (the schedule and synth are untouched) but
+// isn't something wait-mode requires the player to press — and a chord that
+// is *entirely* unsupported advances automatically instead of blocking.
+function guitarPitchFilter(pitches: ReadonlySet<number>): Set<number> {
+  const supported = new Set<number>()
+  for (const pitch of pitches) {
+    if (candidatePositions(pitch).length > 0) supported.add(pitch)
+  }
+  return supported
+}
 
 // Composes wait-mode (PracticeEngine) with loop-region + tempo-ramp + a
 // graded score model. UI reads off `engine.state.*`; nothing here touches
@@ -141,6 +155,7 @@ export class PlayAlongEngine {
     services.clock.seek(initial)
 
     // Now build practice steps + apply filters against the correct time.
+    this.practice.setPitchFilter(this.pitchFilterForMode(services.store.effectiveVisualizationMode))
     this.practice.loadMidi(midi)
     this.applyHand(midi)
     this.applySpeed()
@@ -158,7 +173,20 @@ export class PlayAlongEngine {
         () => learnState.state.status,
         (s) => this.setState('isPlaying', s === 'playing'),
       ),
+      // Play-Along is the one exercise the visualization selector stays
+      // enabled for — a live switch mid-session must re-filter what's
+      // required without disturbing the transport.
+      watch(
+        () => services.store.effectiveVisualizationMode,
+        (mode) => this.practice.setPitchFilter(this.pitchFilterForMode(mode)),
+      ),
     )
+  }
+
+  private pitchFilterForMode(
+    mode: VisualizationMode,
+  ): ((pitches: ReadonlySet<number>) => Set<number>) | null {
+    return mode === 'guitar' ? guitarPitchFilter : null
   }
 
   detach(): void {

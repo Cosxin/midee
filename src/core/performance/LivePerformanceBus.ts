@@ -57,6 +57,7 @@ export function createLivePerformanceBus(): LivePerformanceBus {
     keyboard: false,
     touch: false,
     pi: false,
+    guitar: false,
   }
   const sustainedVoices = new Map<string, RoutedNoteEvent>()
 
@@ -75,7 +76,8 @@ export function createLivePerformanceBus(): LivePerformanceBus {
       pedalSourceDown.midi ||
       pedalSourceDown.keyboard ||
       pedalSourceDown.touch ||
-      pedalSourceDown.pi
+      pedalSourceDown.pi ||
+      pedalSourceDown.guitar
     )
   }
 
@@ -168,6 +170,7 @@ export function createLivePerformanceBus(): LivePerformanceBus {
       pedalSourceDown.keyboard = false
       pedalSourceDown.touch = false
       pedalSourceDown.pi = false
+      pedalSourceDown.guitar = false
       _pedalDown = false
 
       if (wasDown) {

@@ -130,6 +130,14 @@ export class PracticeEngine {
 
   private visibleTrackIds: Set<string> | null = null
 
+  // Optional per-pitch filter applied while building steps — e.g. the guitar
+  // surface uses this to drop pitches with no fretboard position from what's
+  // *required*, without affecting playback/audio (those voices still sound
+  // and render, just aren't gated on). A step whose pitches are entirely
+  // filtered out is dropped from the step list, so wait-mode never engages
+  // on it and the clock advances straight through.
+  private pitchFilter: ((pitches: ReadonlySet<number>) => Set<number>) | null = null
+
   private unsubClock: (() => void) | null = null
 
   constructor(
@@ -144,6 +152,24 @@ export class PracticeEngine {
     this.rebuildSteps()
     this.recomputeNextStep(this.clock.currentTime)
     this.releaseInternalState()
+    this.publish()
+  }
+
+  // Applies immediately: rebuilds steps against the new filter and re-arms
+  // wait-mode against the (possibly now-different) next step, same as
+  // `setVisibleTracks`. Pass `null` to require every pitch again.
+  setPitchFilter(filter: ((pitches: ReadonlySet<number>) => Set<number>) | null): void {
+    const previousWaitStep = this.waiting ? (this.steps[this.nextStepIdx] ?? null) : null
+    this.pitchFilter = filter
+    this.rebuildSteps()
+    this.releaseInternalState()
+    if (!this.enabled) {
+      this.publish()
+      return
+    }
+    if (previousWaitStep && this.reengageFilteredWait(previousWaitStep)) return
+    this.recomputeNextStep(this.clock.currentTime)
+    if (this.engageWaitIfDue(this.clock.currentTime)) return
     this.publish()
   }
 
@@ -360,7 +386,14 @@ export class PracticeEngine {
         if (onsets[j]!.end > latestEnd) latestEnd = onsets[j]!.end
         j++
       }
-      steps.push({ time: head.time, pitches, latestEnd })
+      // A filter (e.g. guitar's "is this pitch on the fretboard?") may drop
+      // every pitch in the group — those groups aren't dropped from playback,
+      // just from what wait-mode requires, so skip adding a step entirely and
+      // let the clock run straight through.
+      const required = this.pitchFilter ? this.pitchFilter(pitches) : pitches
+      if (required.size > 0) {
+        steps.push({ time: head.time, pitches: required, latestEnd })
+      }
       i = j
     }
 

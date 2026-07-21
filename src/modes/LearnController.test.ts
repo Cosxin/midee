@@ -100,6 +100,7 @@ function makeFakeCtx() {
         setState: vi.fn((key: string, val: unknown) => {
           ;(storeState as Record<string, unknown>)[key] = val
         }),
+        setVisualizationForced: vi.fn(),
       },
       clock: {
         currentTime: 0,
@@ -193,5 +194,48 @@ describe('LearnController.queueMidi', () => {
     ctrl.enter()
     await Promise.resolve()
     expect(ctx.setLearnFileName).toHaveBeenCalledWith('bach-prelude.mid')
+  })
+})
+
+// `launchExercise` is private — the hub UI is mocked out (see the
+// `createLearnHub` mock above), so it's the only way to drive a non-default
+// exercise without standing up the real catalog/hub DOM. Casting to reach it
+// tests the forcing/restoration policy directly, independent of hub wiring.
+interface LaunchExerciseAccess {
+  launchExercise(descriptor: { id: string; category: string }): Promise<void>
+}
+
+describe('LearnController visualization forcing', () => {
+  const sightReading = { id: 'sight-reading', category: 'sight-reading' }
+  const playAlongLike = { id: 'play-along', category: 'play-along' }
+
+  it('forces piano and disables the selector for a non-play-along exercise', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    await Promise.resolve()
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
+  })
+
+  it('clears the force when the launched exercise is play-along', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    await Promise.resolve()
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(playAlongLike)
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+  })
+
+  it('restores on exit() — never overwrites the saved preference, only clears the force', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    await Promise.resolve()
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
+    ctrl.exit()
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
   })
 })

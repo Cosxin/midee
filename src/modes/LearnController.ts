@@ -146,6 +146,9 @@ export class LearnController {
     // Close any active exercise as abandoned — this is a mode-level swap,
     // not an explicit "I'm done" signal.
     if (this.runner?.isActive) this.runner.close('abandoned')
+    // Release any piano force this session left behind — restores whatever
+    // the user's saved preference was without ever having written to it.
+    this.applyVisualizationForce(null)
     for (const off of this.unsubs) off()
     this.unsubs = []
     this.hub.unmount()
@@ -256,6 +259,14 @@ export class LearnController {
 
   private async launchExercise(descriptor: ExerciseDescriptor): Promise<void> {
     if (!this.exerciseHost || !this.overlay) return
+    // Every Learn exercise except Play-Along is piano-only today (sight
+    // reading's staff, interval ear-training, etc. have no guitar
+    // equivalent) — force the surface to piano and disable the topbar
+    // selector for the duration. Play-Along clears the force so guitar stays
+    // available. `effectiveVisualizationMode`'s watch (see app.ts) picks up
+    // the change and switches the surface; the user's saved preference is
+    // never touched, so it's exactly what gets restored on exit.
+    this.applyVisualizationForce(descriptor)
     // Close the hub view so the exercise has the whole overlay.
     this.showExerciseView()
     if (!this.runner) {
@@ -281,6 +292,7 @@ export class LearnController {
     const xpBefore = this.progress.xp
     const streakBefore = this.progress.streakDays
     const result = this.runner.close(reason)
+    this.applyVisualizationForce(null)
     this.showHubView()
     this.clearLoadedLearnMidi()
     if (result && lastDescriptor) {
@@ -306,6 +318,14 @@ export class LearnController {
         })
       }
     }
+  }
+
+  // `null` restores the user's saved preference (never touched by this
+  // method — see `AppStore.setVisualizationForced`). A non-play-along
+  // descriptor forces piano; play-along (or no active exercise) clears it.
+  private applyVisualizationForce(descriptor: ExerciseDescriptor | null): void {
+    const forced = descriptor && descriptor.category !== 'play-along' ? 'piano' : null
+    this.ctx.services.store.setVisualizationForced(forced)
   }
 
   private relaunchById(id: string): void {

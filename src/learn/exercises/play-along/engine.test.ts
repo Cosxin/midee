@@ -156,7 +156,10 @@ function makeServices(): {
     renderer,
     learnState,
     services: {
-      store: null as never,
+      // Only `effectiveVisualizationMode` is read (guitar pitch filtering) —
+      // these tests exercise piano-only behavior, so a fixed 'piano' is
+      // enough without standing up a full reactive store.
+      store: { effectiveVisualizationMode: 'piano' } as unknown as AppServices['store'],
       clock: clock as unknown as AppServices['clock'],
       synth: synth as unknown as AppServices['synth'],
       metronome: null as never,
@@ -165,6 +168,57 @@ function makeServices(): {
     },
   }
 }
+
+function makeMidiWithUnsupportedGuitarNote(): MidiFile {
+  return {
+    name: 'guitar-drill.mid',
+    duration: 10,
+    bpm: 120,
+    timeSignature: [4, 4],
+    tracks: [
+      {
+        id: 'rh',
+        name: 'Right',
+        channel: 0,
+        instrument: 0,
+        isDrum: false,
+        color: 0xffffff,
+        colorIndex: 0,
+        notes: [
+          // Standard guitar tuning covers pitch 40 (low E) through 88 — 30 is
+          // below the lowest open string, so it's unsupported on the
+          // fretboard; 60 sits comfortably within range.
+          { pitch: 30, time: 2, duration: 0.5, velocity: 1 },
+          { pitch: 60, time: 2, duration: 0.5, velocity: 1 },
+        ],
+      },
+    ],
+  }
+}
+
+describe('PlayAlongEngine guitar visualization — unsupported-voice scoring', () => {
+  it('piano mode requires every pitch, unfiltered', () => {
+    const { services, learnState } = makeServices()
+    ;(
+      services.store as unknown as { effectiveVisualizationMode: string }
+    ).effectiveVisualizationMode = 'piano'
+    const engine = new PlayAlongEngine({ services, learnState })
+    engine.attach(makeMidiWithUnsupportedGuitarNote())
+    expect(engine.practice.peekNextStep()?.pitches).toEqual(new Set([30, 60]))
+  })
+
+  it('guitar mode excludes the pitch with no fretboard position from what is required', () => {
+    const { services, learnState } = makeServices()
+    ;(
+      services.store as unknown as { effectiveVisualizationMode: string }
+    ).effectiveVisualizationMode = 'guitar'
+    const engine = new PlayAlongEngine({ services, learnState })
+    engine.attach(makeMidiWithUnsupportedGuitarNote())
+    // 30 stays out of the required set — it's still part of the schedule the
+    // synth/renderer play, just not something wait-mode blocks on.
+    expect(engine.practice.peekNextStep()?.pitches).toEqual(new Set([60]))
+  })
+})
 
 describe('PlayAlongEngine', () => {
   it('applies speed preset to clock and synth', () => {
