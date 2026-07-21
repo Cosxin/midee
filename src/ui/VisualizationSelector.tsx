@@ -1,4 +1,4 @@
-import { createUniqueId } from 'solid-js'
+import { createUniqueId, Show } from 'solid-js'
 import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 
@@ -6,7 +6,7 @@ export interface VisualizationSelectorProps {
   mode: VisualizationMode
   onChange: (mode: VisualizationMode) => void
   disabled: boolean
-  disabledReason?: string
+  disabledReason?: string | undefined
 }
 
 const MODES: readonly VisualizationMode[] = ['piano', 'guitar']
@@ -34,7 +34,7 @@ export function VisualizationSelector(props: VisualizationSelectorProps) {
           <label
             class="ts-view-option"
             classList={{ 'is-active': props.mode === mode }}
-            title={disabledReason() ?? t(`visualization.${mode}.aria`)}
+            title={t(`visualization.${mode}.aria`)}
           >
             <input
               class="ts-view-input"
@@ -51,11 +51,13 @@ export function VisualizationSelector(props: VisualizationSelectorProps) {
           </label>
         ))}
       </div>
-      {disabledReason() && (
-        <span class="ts-view-disabled-reason" id={reasonId} role="status">
-          {disabledReason()}
-        </span>
-      )}
+      <Show when={disabledReason()}>
+        {(reason) => (
+          <span class="ts-view-disabled-reason" id={reasonId}>
+            {reason()}
+          </span>
+        )}
+      </Show>
     </div>
   )
 }

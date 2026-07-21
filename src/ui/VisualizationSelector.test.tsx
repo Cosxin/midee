@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { createSignal } from 'solid-js'
 import { describe, expect, it, vi } from 'vitest'
-import type { Messages } from '../i18n'
+import { type Messages, setLocale } from '../i18n'
 import { en } from '../i18n/locales/en'
 import es from '../i18n/locales/es'
 import fr from '../i18n/locales/fr'
@@ -15,13 +16,13 @@ describe('VisualizationSelector', () => {
     render(() => <VisualizationSelector mode="piano" onChange={onChange} disabled={false} />)
 
     expect(screen.getByRole('radiogroup', { name: en['visualization.aria'] })).toBeTruthy()
-    expect(
-      (
-        screen.getByRole('radio', {
-          name: en['visualization.piano.aria'],
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true)
+    const piano = screen.getByRole('radio', {
+      name: en['visualization.piano.aria'],
+    }) as HTMLInputElement
+    expect(piano.checked).toBe(true)
+    fireEvent.change(piano)
+    expect(onChange).not.toHaveBeenCalled()
+
     fireEvent.click(screen.getByRole('radio', { name: en['visualization.guitar.aria'] }))
     expect(onChange).toHaveBeenCalledWith('guitar')
   })
@@ -49,14 +50,45 @@ describe('VisualizationSelector', () => {
     ))
 
     const group = screen.getByRole('radiogroup', { name: en['visualization.aria'] })
-    const explanation = screen.getByRole('status')
+    const explanation = screen.getByText(reason)
     expect(explanation.textContent).toBe(reason)
+    expect(explanation.getAttribute('role')).toBeNull()
     expect(group.getAttribute('aria-describedby')).toBe(explanation.id)
     for (const choice of screen.getAllByRole('radio')) {
       expect((choice as HTMLInputElement).disabled).toBe(true)
     }
     fireEvent.click(screen.getByRole('radio', { name: en['visualization.guitar.aria'] }))
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('reacts to disabled state, reason, and locale changes without duplicating the reason', async () => {
+    const [disabled, setDisabled] = createSignal(false)
+    const [reason, setReason] = createSignal<string>()
+    render(() => (
+      <VisualizationSelector
+        mode="piano"
+        onChange={vi.fn()}
+        disabled={disabled()}
+        disabledReason={reason()}
+      />
+    ))
+
+    const group = screen.getByRole('radiogroup', { name: en['visualization.aria'] })
+    expect(group.getAttribute('aria-describedby')).toBeNull()
+
+    setDisabled(true)
+    expect(screen.getAllByText(en['visualization.learnPianoRequired'])).toHaveLength(1)
+
+    setReason('Custom reason')
+    expect(screen.queryByText(en['visualization.learnPianoRequired'])).toBeNull()
+    expect(screen.getAllByText('Custom reason')).toHaveLength(1)
+
+    setReason(undefined)
+    await setLocale('pl')
+    expect(screen.getByRole('radio', { name: pl['visualization.piano.aria'] })).toBeTruthy()
+    expect(screen.getByText(pl['visualization.piano.label'])).toBeTruthy()
+    expect(screen.getAllByText(pl['visualization.learnPianoRequired'])).toHaveLength(1)
+    await setLocale('en')
   })
 
   it('ships matching visualization and guitar-renderer keys in every locale', () => {
