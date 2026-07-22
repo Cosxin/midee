@@ -326,7 +326,6 @@ export class GuitarSurface implements VisualizationSurface {
   private practiceAccepted: ReadonlySet<number> | null = null
   private practiceTrackIds: Set<string> | null = null
   private hiddenTrackIds = new Set<string>()
-  private liveNotesVisible = true
   private layers: RenderLayer[] = []
   private gestures = new Map<number, PointerGesture>()
   private interaction = new FretboardInteraction((hit) => this.surfaceHits.set(hit))
@@ -408,8 +407,9 @@ export class GuitarSurface implements VisualizationSurface {
     this.wake()
   }
 
-  setLiveNotesVisible(visible: boolean): void {
-    this.liveNotesVisible = visible
+  setLiveNotesVisible(_visible: boolean): void {
+    // Guitar has no floating live trajectory layer yet. Held fret highlights and
+    // activeKeys are input state, so this contract must not suppress them.
     this.renderStaticFrame(this.lastTime)
     this.wake()
   }
@@ -545,8 +545,7 @@ export class GuitarSurface implements VisualizationSurface {
     const clock = this.clock
     if (!clock) return
     const hasLive =
-      this.liveNotesVisible &&
-      ((this.liveStore?.heldVoices.size ?? 0) > 0 || (this.loopStore?.heldVoices.size ?? 0) > 0)
+      (this.liveStore?.heldVoices.size ?? 0) > 0 || (this.loopStore?.heldVoices.size ?? 0) > 0
     const animating = clock.playing || hasLive || this.layers.length > 0
     if (!this.activity.shouldRender(animating)) {
       this.app.ticker.stop()
@@ -605,7 +604,6 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private collectActive(): AssignedGuitarVoice[] {
-    if (!this.liveNotesVisible) return this.currentWindow.active
     const liveNotes = [this.liveStore, this.loopStore].flatMap((store) =>
       store ? Array.from(store.heldVoices.values()) : [],
     )
@@ -899,7 +897,11 @@ export class GuitarSurface implements VisualizationSurface {
     this.renderStaticFrame(this.lastTime)
   }
 
-  private handleResize = (): void => this.resize(window.innerWidth, window.innerHeight)
+  private handleResize = (): void => {
+    // Export owns the backing-store dimensions until it restores them after capture.
+    if (this.activity.exportMode) return
+    this.resize(window.innerWidth, window.innerHeight)
+  }
 
   private invalidateAccessibleTargets(): void {
     this.accessibleCache.invalidate()

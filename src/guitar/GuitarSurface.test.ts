@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { MidiFile } from '../core/midi/types'
 import type { VisualizationSurface } from '../renderer/VisualizationSurface'
 import {
@@ -246,6 +246,77 @@ describe('guitar schedule', () => {
 })
 
 describe('surface lifecycle helpers', () => {
+  it('keeps Learn-held live and loop positions active while trajectories are hidden', () => {
+    const surface = new GuitarSurface()
+    const liveVoice = {
+      pitch: 45,
+      startTime: 1,
+      endTime: null,
+      velocity: 1,
+      voiceId: 'live:low-e:5',
+      string: 0,
+      fret: 5,
+    }
+    const loopVoice = {
+      pitch: 50,
+      startTime: 1,
+      endTime: null,
+      velocity: 1,
+      voiceId: 'loop:d:0',
+      string: 2,
+      fret: 0,
+    }
+    const harness = surface as unknown as {
+      liveStore: { heldVoices: Map<string, typeof liveVoice> }
+      loopStore: { heldVoices: Map<string, typeof loopVoice> }
+      renderStaticFrame: (time: number) => void
+      wake: () => void
+      collectActive: () => Array<{ pitch: number; position?: { string: number; fret: number } }>
+      clock: { currentTime: number; playing: boolean }
+      app: { ticker: { stop: () => void } }
+      activity: GuitarRenderActivity
+      onTick: (ticker: { deltaMS: number; stop: () => void }) => void
+    }
+    harness.liveStore = { heldVoices: new Map([[liveVoice.voiceId, liveVoice]]) }
+    harness.loopStore = { heldVoices: new Map([[loopVoice.voiceId, loopVoice]]) }
+    harness.renderStaticFrame = vi.fn()
+    harness.wake = vi.fn()
+
+    surface.setLiveNotesVisible(false)
+
+    expect(harness.collectActive()).toMatchObject([
+      { pitch: 45, position: { string: 0, fret: 5 } },
+      { pitch: 50, position: { string: 2, fret: 0 } },
+    ])
+
+    harness.clock = { currentTime: 1, playing: false }
+    harness.app = { ticker: { stop: vi.fn() } }
+    const shouldRender = vi.spyOn(harness.activity, 'shouldRender').mockReturnValue(false)
+    harness.onTick({ deltaMS: 16, stop: vi.fn() })
+    expect(shouldRender).toHaveBeenCalledWith(true)
+  })
+
+  it('ignores window resize while capture owns canvas size, then resumes resizing', () => {
+    const surface = new GuitarSurface()
+    const ticker = { started: false, start: vi.fn(), stop: vi.fn() }
+    const harness = surface as unknown as {
+      app: { ticker: typeof ticker }
+      resize: (width: number, height: number) => void
+      handleResize: () => void
+    }
+    harness.app = { ticker }
+    harness.resize = vi.fn()
+
+    surface.pauseAutoRender()
+    harness.handleResize()
+    expect(harness.resize).not.toHaveBeenCalled()
+
+    surface.resumeAutoRender()
+    harness.handleResize()
+    expect(harness.resize).toHaveBeenCalledOnce()
+    expect(harness.resize).toHaveBeenCalledWith(window.innerWidth, window.innerHeight)
+  })
+
   it('toggles canvas visibility and pointer activity together', () => {
     const canvas = document.createElement('canvas')
     applyGuitarCanvasVisibility(canvas, false)
