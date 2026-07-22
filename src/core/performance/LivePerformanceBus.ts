@@ -10,6 +10,8 @@ export interface RoutedNoteEvent {
   sourceId?: string
   channel?: number
   voiceId?: string
+  string?: number
+  fret?: number
   /** True while any pedal source (MIDI or keyboard) is held. */
   pedalDown: boolean
 }

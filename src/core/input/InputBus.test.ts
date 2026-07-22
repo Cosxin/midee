@@ -71,6 +71,8 @@ describe('InputBus', () => {
         clockTime: 1.5,
         sourceId: 'guitar:fretboard',
         voiceId: 'guitar:fretboard:pointer-1:3',
+        string: 0,
+        fret: 5,
       },
       'guitar',
     )
@@ -79,6 +81,8 @@ describe('InputBus', () => {
       source: 'guitar',
       sourceId: 'guitar:fretboard',
       voiceId: 'guitar:fretboard:pointer-1:3',
+      string: 0,
+      fret: 5,
     })
   })
 

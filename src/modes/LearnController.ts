@@ -62,6 +62,7 @@ export class LearnController {
   // time `enter()` runs, the cached MIDI is the cleanest way to hand context
   // across the async boundary.
   private pendingMidi: MidiFile | null = null
+  private launchGeneration = 0
 
   constructor(private ctx: ModeContext) {
     this.hub = createLearnHub()
@@ -143,6 +144,7 @@ export class LearnController {
   }
 
   exit(): void {
+    this.launchGeneration++
     // Close any active exercise as abandoned — this is a mode-level swap,
     // not an explicit "I'm done" signal.
     if (this.runner?.isActive) this.runner.close('abandoned')
@@ -266,6 +268,7 @@ export class LearnController {
     // available. `effectiveVisualizationMode`'s watch (see app.ts) picks up
     // the change and switches the surface; the user's saved preference is
     // never touched, so it's exactly what gets restored on exit.
+    const generation = ++this.launchGeneration
     this.applyVisualizationForce(descriptor)
     // Close the hub view so the exercise has the whole overlay.
     this.showExerciseView()
@@ -279,7 +282,17 @@ export class LearnController {
         onClose: (reason) => this.closeActiveExercise(reason),
       })
     }
-    await this.runner.launch(descriptor)
+    try {
+      await this.runner.launch(descriptor)
+    } catch (err) {
+      // A failed dynamic exercise launch must not strand Learn in an empty
+      // exercise view or leave the visualization selector forced to piano.
+      if (generation === this.launchGeneration) {
+        this.applyVisualizationForce(null)
+        this.showHubView()
+        console.error('[LearnController] Exercise launch failed:', err)
+      }
+    }
   }
 
   // Called by the runner's `onClose` (triggered from an exercise via

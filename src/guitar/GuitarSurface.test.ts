@@ -3,8 +3,12 @@ import type { MidiFile } from '../core/midi/types'
 import type { VisualizationSurface } from '../renderer/VisualizationSurface'
 import {
   AccessibilityTargetCache,
+  applyGuitarCanvasVisibility,
   applySurfaceResize,
+  assignLiveGuitarVoices,
   buildGuitarSchedule,
+  buildVisibleGuitarSchedule,
+  filterGuitarWindow,
   GUITAR_CLUSTER_WINDOW_SECONDS,
   GuitarRenderActivity,
   GuitarSurface,
@@ -48,15 +52,69 @@ describe('GuitarSurface contract', () => {
     expect(surface.activeKeys.value).toEqual(new Map())
     expect(surface.currentTheme.name).toBe('Dark')
   })
+
+  it('keeps low-E fret 5 instead of re-fingering the same pitch as open A', () => {
+    const voices = assignLiveGuitarVoices([
+      {
+        pitch: 45,
+        startTime: 0,
+        endTime: null,
+        velocity: 1,
+        voiceId: 'guitar:low-e:5',
+        string: 0,
+        fret: 5,
+      },
+      {
+        pitch: 45,
+        startTime: 0,
+        endTime: null,
+        velocity: 1,
+        voiceId: 'keyboard:a',
+      },
+    ])
+    expect(voices[0]?.position).toEqual({ string: 0, fret: 5 })
+    expect(voices[1]?.position?.string).not.toBe(0)
+  })
 })
 
 describe('guitar schedule', () => {
+  it('omits hidden tracks from active and upcoming rendering and restores them when re-shown', () => {
+    const schedule = buildGuitarSchedule(midiAt([0, 1]))
+    const window = queryGuitarSchedule(schedule, 0, 2.4)
+    const hidden = filterGuitarWindow(window, new Set(['track-a']))
+    expect(hidden.active).toHaveLength(0)
+    expect(hidden.upcoming).toHaveLength(0)
+    const shown = filterGuitarWindow(window, new Set())
+    expect(shown.active.length + shown.upcoming.length).toBeGreaterThan(0)
+  })
+
   it('clusters 0.040-second notes together and splits 0.041-second notes', () => {
     expect(GUITAR_CLUSTER_WINDOW_SECONDS).toBe(0.04)
     const together = buildGuitarSchedule(midiAt([0, 0.04])).notes
     const split = buildGuitarSchedule(midiAt([0, 0.041])).notes
     expect(together[0]!.position?.string).not.toBe(together[1]!.position?.string)
     expect(split[0]!.position).toEqual(split[1]!.position)
+  })
+
+  it('removes hidden competitors before fingering assignment', () => {
+    const midi = midiAt([])
+    midi.tracks = [
+      {
+        ...midi.tracks[0]!,
+        id: 'hidden',
+        notes: [{ pitch: 40, time: 0, duration: 1, velocity: 1 }],
+      },
+      {
+        ...midi.tracks[0]!,
+        id: 'visible',
+        notes: [{ pitch: 41, time: 0, duration: 1, velocity: 1 }],
+      },
+    ]
+    const all = buildGuitarSchedule(midi)
+    expect(all.notes.find((voice) => voice.sourceId === 'visible')?.supported).toBe(false)
+    const filtered = buildVisibleGuitarSchedule(midi, new Set(['hidden']))
+    expect(filtered.notes).toHaveLength(1)
+    expect(filtered.notes[0]).toMatchObject({ sourceId: 'visible', supported: true })
   })
 
   it('assigns deterministic IDs and caches duration/end time on every voice', () => {
@@ -188,6 +246,16 @@ describe('guitar schedule', () => {
 })
 
 describe('surface lifecycle helpers', () => {
+  it('toggles canvas visibility and pointer activity together', () => {
+    const canvas = document.createElement('canvas')
+    applyGuitarCanvasVisibility(canvas, false)
+    expect(canvas.style.visibility).toBe('hidden')
+    expect(canvas.style.pointerEvents).toBe('none')
+    applyGuitarCanvasVisibility(canvas, true)
+    expect(canvas.style.visibility).toBe('')
+    expect(canvas.style.pointerEvents).toBe('')
+  })
+
   it('renders a 30-frame idle grace, wakes, and yields rendering during capture', () => {
     const activity = new GuitarRenderActivity()
     for (let frame = 0; frame < 30; frame++) expect(activity.shouldRender(false)).toBe(true)

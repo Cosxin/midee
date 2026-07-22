@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Rectangle, Text, TextStyle, type Ticker } from 'pixi.js'
 import type { MasterClock } from '../core/clock/MasterClock'
 import type { MidiFile } from '../core/midi/types'
-import type { LiveNoteStore } from '../midi/LiveNoteStore'
+import type { LiveNote, LiveNoteStore } from '../midi/LiveNoteStore'
 import type { RenderLayer } from '../renderer/RenderLayer'
 import { darkTheme, getTrackColor, type Theme } from '../renderer/theme'
 import type {
@@ -38,6 +38,11 @@ export const GUITAR_CLUSTER_WINDOW_SECONDS = 0.04
 const IDLE_GRACE_FRAMES = 30
 const STRING_NAMES = ['Low E', 'A', 'D', 'G', 'B', 'High E'] as const
 
+export function applyGuitarCanvasVisibility(canvas: HTMLCanvasElement, visible: boolean): void {
+  canvas.style.visibility = visible ? '' : 'hidden'
+  canvas.style.pointerEvents = visible ? '' : 'none'
+}
+
 export interface ScheduledGuitarVoice extends AssignedGuitarVoice {
   voiceId: string
   duration: number
@@ -67,6 +72,47 @@ export interface GuitarScheduleWindow {
   active: ScheduledGuitarVoice[]
   upcoming: ScheduledGuitarVoice[]
   inspected: number
+}
+
+export function filterGuitarWindow(
+  window: GuitarScheduleWindow,
+  hiddenTrackIds: ReadonlySet<string>,
+): GuitarScheduleWindow {
+  return {
+    active: window.active.filter((voice) => !hiddenTrackIds.has(voice.sourceId ?? '')),
+    upcoming: window.upcoming.filter((voice) => !hiddenTrackIds.has(voice.sourceId ?? '')),
+    inspected: window.inspected,
+  }
+}
+
+export function assignLiveGuitarVoices(notes: readonly LiveNote[]): AssignedGuitarVoice[] {
+  const voices = notes.map((note) => ({
+    pitch: note.pitch,
+    time: note.startTime,
+    voiceId: note.voiceId,
+    ...(note.channel !== undefined ? { channel: note.channel } : {}),
+    ...(note.sourceId !== undefined ? { sourceId: note.sourceId } : {}),
+    ...(note.string !== undefined && note.fret !== undefined
+      ? { position: { string: note.string, fret: note.fret }, supported: true as const }
+      : {}),
+  }))
+  const performed = voices.filter(
+    (voice): voice is typeof voice & { position: GuitarPosition; supported: true } =>
+      'position' in voice,
+  )
+  const reservedStrings = new Set(performed.map((voice) => voice.position.string))
+  const availableProfile = {
+    ...STANDARD_GUITAR_PROFILE,
+    strings: STANDARD_GUITAR_PROFILE.strings.filter((string) => !reservedStrings.has(string.index)),
+  }
+  return [
+    ...performed,
+    ...assignGuitarCluster(
+      voices.filter((voice) => !('position' in voice)),
+      undefined,
+      availableProfile,
+    ).voices,
+  ]
 }
 
 export function buildGuitarSchedule(source: MidiFile): GuitarSchedule {
@@ -99,6 +145,16 @@ export function buildGuitarSchedule(source: MidiFile): GuitarSchedule {
     )
     .sort((left, right) => left.time - right.time || left.voiceId.localeCompare(right.voiceId))
   return indexGuitarNotes(notes)
+}
+
+export function buildVisibleGuitarSchedule(
+  source: MidiFile,
+  hiddenTrackIds: ReadonlySet<string>,
+): GuitarSchedule {
+  return buildGuitarSchedule({
+    ...source,
+    tracks: source.tracks.filter((track) => !hiddenTrackIds.has(track.id)),
+  })
 }
 
 /** Builds a schedule (with its interval index) from notes already sorted by (time, voiceId). */
@@ -269,6 +325,7 @@ export class GuitarSurface implements VisualizationSurface {
   private practicePending: ReadonlySet<number> | null = null
   private practiceAccepted: ReadonlySet<number> | null = null
   private practiceTrackIds: Set<string> | null = null
+  private hiddenTrackIds = new Set<string>()
   private liveNotesVisible = true
   private layers: RenderLayer[] = []
   private gestures = new Map<number, PointerGesture>()
@@ -312,18 +369,29 @@ export class GuitarSurface implements VisualizationSurface {
 
   loadMidi(source: VisualizationFrameSource): void {
     this.midi = source
-    this.schedule = buildGuitarSchedule(source)
+    this.hiddenTrackIds.clear()
+    this.schedule = buildVisibleGuitarSchedule(source, this.hiddenTrackIds)
     this.renderStaticFrame(0)
     this.wake()
   }
 
   clearMidi(): void {
     this.midi = null
+    this.hiddenTrackIds.clear()
     this.schedule = indexGuitarNotes([])
     this.currentWindow = { active: [], upcoming: [], inspected: 0 }
     this.interaction.cancelAll()
     this.renderStaticFrame(0)
     this.wake()
+  }
+
+  setTrackVisible(trackId: string, visible: boolean): void {
+    if (visible) this.hiddenTrackIds.delete(trackId)
+    else this.hiddenTrackIds.add(trackId)
+    if (this.midi) {
+      this.schedule = buildVisibleGuitarSchedule(this.midi, this.hiddenTrackIds)
+    }
+    this.renderStaticFrame(this.lastTime)
   }
 
   setLiveNoteStore(store: LiveVoiceSource): void {
@@ -383,7 +451,7 @@ export class GuitarSurface implements VisualizationSurface {
   // is hidden; this surface doesn't know if it's even the active one).
   setVisible(visible: boolean): void {
     this.app.stage.visible = visible
-    this.app.canvas.style.visibility = visible ? '' : 'hidden'
+    applyGuitarCanvasVisibility(this.app.canvas as HTMLCanvasElement, visible)
     if (!visible) this.cleanupGestures()
     if (visible) this.renderStaticFrame(this.lastTime)
   }
@@ -500,7 +568,10 @@ export class GuitarSurface implements VisualizationSurface {
 
   private renderFrame(currentTime: number, dt: number): void {
     this.lastTime = currentTime
-    this.currentWindow = queryGuitarSchedule(this.schedule, currentTime)
+    this.currentWindow = filterGuitarWindow(
+      queryGuitarSchedule(this.schedule, currentTime),
+      this.hiddenTrackIds,
+    )
     const active = this.collectActive()
     const follow = active.find((voice) => voice.position)?.position
     if (follow && this.interaction.canAutoFollow(performance.now())) {
@@ -519,18 +590,10 @@ export class GuitarSurface implements VisualizationSurface {
 
   private collectActive(): AssignedGuitarVoice[] {
     if (!this.liveNotesVisible) return this.currentWindow.active
-    const liveVoices = [this.liveStore, this.loopStore].flatMap((store) =>
-      store
-        ? Array.from(store.heldVoices.values(), (note) => ({
-            pitch: note.pitch,
-            time: note.startTime,
-            voiceId: note.voiceId,
-            ...(note.channel !== undefined ? { channel: note.channel } : {}),
-            ...(note.sourceId !== undefined ? { sourceId: note.sourceId } : {}),
-          }))
-        : [],
+    const liveNotes = [this.liveStore, this.loopStore].flatMap((store) =>
+      store ? Array.from(store.heldVoices.values()) : [],
     )
-    return [...this.currentWindow.active, ...assignGuitarCluster(liveVoices).voices]
+    return [...this.currentWindow.active, ...assignLiveGuitarVoices(liveNotes)]
   }
 
   private draw(active: readonly AssignedGuitarVoice[], currentTime: number): void {

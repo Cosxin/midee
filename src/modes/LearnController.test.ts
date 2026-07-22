@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MidiFile } from '../core/midi/types'
 import { LearnController } from './LearnController'
 
+const runnerLaunch = vi.hoisted(() => vi.fn(() => Promise.resolve()))
+
 // LearnOverlay pulls in PixiJS (Container / Graphics) which needs a real
 // WebGL context — not available in jsdom. Mock the whole module so
 // `new LearnOverlay()` returns a plain object with enough of the surface to
@@ -26,9 +28,7 @@ vi.mock('../learn/core/ExerciseRunner', () => ({
     get activeId() {
       return null
     }
-    launch() {
-      return Promise.resolve()
-    }
+    launch = runnerLaunch
     close() {
       return null
     }
@@ -237,5 +237,39 @@ describe('LearnController visualization forcing', () => {
     expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
     ctrl.exit()
     expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+  })
+
+  it('clears a piano force when exercise launch rejects', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    runnerLaunch.mockRejectedValueOnce(new Error('exercise failed'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenNthCalledWith(1, 'piano')
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it('does not let a stale failed launch roll back a newer successful launch', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    let rejectFirst!: (reason: unknown) => void
+    runnerLaunch
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject
+          }),
+      )
+      .mockResolvedValueOnce(undefined)
+    const first = (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    const second = (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    await second
+    rejectFirst(new Error('stale preload failed'))
+    await first
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
   })
 })

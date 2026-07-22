@@ -149,6 +149,14 @@ describe('LiveNoteStore', () => {
     expect(store.releasedNotes).toHaveLength(0)
   })
 
+  it('preserves performed string and fret through held and released voice trails', () => {
+    const store = new LiveNoteStore()
+    store.press(45, 0.9, 1, { voiceId: 'guitar:low-e:5', string: 0, fret: 5 })
+    expect(store.heldVoices.get('guitar:low-e:5')).toMatchObject({ string: 0, fret: 5 })
+    store.releaseVoice('guitar:low-e:5', 2)
+    expect(store.releasedNotes[0]).toMatchObject({ string: 0, fret: 5, endTime: 2 })
+  })
+
   // onChange is the renderer's wake signal: it must fire on every mutation
   // that changes renderable content (press/release/reset) so the idle-stopped
   // ticker restarts, and must stay silent for pruneInvisible, which runs

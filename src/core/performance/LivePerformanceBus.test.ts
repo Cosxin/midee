@@ -73,6 +73,8 @@ describe('LivePerformanceBus', () => {
       source: 'guitar',
       sourceId: 'guitar:fretboard',
       voiceId: 'guitar:fretboard:pointer-1:1',
+      string: 0,
+      fret: 5,
     })
     expect(ons).toEqual(['guitar:45'])
   })

@@ -6,6 +6,8 @@ export interface LiveNote {
   sourceId?: string
   channel?: number
   voiceId: string
+  string?: number
+  fret?: number
 }
 
 // Tracks held keys plus released note trails that should keep scrolling upward
@@ -51,7 +53,13 @@ export class LiveNoteStore {
     pitch: number,
     velocity: number,
     clockTime: number,
-    identity?: { sourceId?: string; channel?: number; voiceId?: string },
+    identity?: {
+      sourceId?: string
+      channel?: number
+      voiceId?: string
+      string?: number
+      fret?: number
+    },
   ): void {
     const voiceId = identity?.voiceId ?? `legacy:${pitch}`
     // If somehow already held (e.g. stuck note), release it first
@@ -64,6 +72,8 @@ export class LiveNoteStore {
       voiceId,
       ...(identity?.sourceId ? { sourceId: identity.sourceId } : {}),
       ...(identity?.channel !== undefined ? { channel: identity.channel } : {}),
+      ...(identity?.string !== undefined ? { string: identity.string } : {}),
+      ...(identity?.fret !== undefined ? { fret: identity.fret } : {}),
     })
     this.notifyChange()
   }

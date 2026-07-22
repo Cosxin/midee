@@ -11,6 +11,9 @@ export interface MidiNoteEvent {
   channel?: number
   /** Stable across the matching note-on/note-off pair. */
   voiceId?: string
+  /** Physical fretboard identity, when the event came from guitar input. */
+  string?: number
+  fret?: number
 }
 
 export type MidiDeviceStatus = 'unavailable' | 'disconnected' | 'connected' | 'blocked'

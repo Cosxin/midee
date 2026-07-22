@@ -93,7 +93,13 @@ export class App {
   // directly since it has no guitar equivalent.
   private pianoRenderer = new PianoRollRenderer()
   private guitarCanvas!: HTMLCanvasElement
-  private surfaces = new SurfaceRouter(this.pianoRenderer, () => this.createGuitarSurface())
+  private surfaces = new SurfaceRouter(
+    this.pianoRenderer,
+    () => this.createGuitarSurface(),
+    (from, to) => {
+      if (from === 'piano' && to === 'guitar') this.releaseActivePianoPointerNote()
+    },
+  )
   private synth = new SynthEngine()
   private inputBus = new InputBus()
   midiInput!: MidiInputManager
@@ -289,6 +295,8 @@ export class App {
             ...(evt.sourceId !== undefined ? { sourceId: evt.sourceId } : {}),
             ...(evt.channel !== undefined ? { channel: evt.channel } : {}),
             ...(evt.voiceId !== undefined ? { voiceId: evt.voiceId } : {}),
+            ...(evt.string !== undefined ? { string: evt.string } : {}),
+            ...(evt.fret !== undefined ? { fret: evt.fret } : {}),
           })
         },
         (evt) => {
@@ -424,7 +432,7 @@ export class App {
     this.trackPanel = new TrackPanel(
       overlay,
       this.pianoRenderer.currentTheme,
-      (id, visible) => this.pianoRenderer.setTrackVisible(id, visible),
+      (id, visible) => this.surfaces.setTrackVisible(id, visible),
       (id, enabled) => {
         this.synth.setTrackEnabled(id, enabled)
         trackEvent('track_toggled', { enabled })
@@ -644,6 +652,8 @@ export class App {
           sourceId: hit.sourceId,
           voiceId: hit.voiceId,
           ...(hit.channel !== undefined ? { channel: hit.channel } : {}),
+          ...(hit.string !== undefined ? { string: hit.string } : {}),
+          ...(hit.fret !== undefined ? { fret: hit.fret } : {}),
         }
         if (hit.type === 'note-on') this.inputBus.emitNoteOn(evt, 'guitar')
         else this.inputBus.emitNoteOff(evt, 'guitar')
@@ -724,6 +734,9 @@ export class App {
   }
 
   private async switchVisualizationSurface(mode: VisualizationMode): Promise<void> {
+    if (mode === 'guitar' && this.surfaces.currentMode === 'piano') {
+      this.releaseActivePianoPointerNote()
+    }
     try {
       await this.surfaces.setMode(mode, this.clock.currentTime)
     } catch (err) {
@@ -896,6 +909,10 @@ export class App {
   }
 
   private onCanvasPointerUp = (): void => {
+    this.releaseActivePianoPointerNote()
+  }
+
+  private releaseActivePianoPointerNote(): void {
     if (this.activeMouseNote === null) return
     const pitch = this.activeMouseNote
     this.activeMouseNote = null
@@ -1278,11 +1295,28 @@ export class App {
       if (pitchChanged) this.pianoRenderer.setPitchRange(originalRange.min, originalRange.max)
       if (ppsChanged) this.pianoRenderer.setZoom(originalPps)
       lease?.surface.resumeAutoRender()
-      // Release only after size/render state is fully restored — this is
-      // what lets a visualization switch deferred during capture (see
-      // SurfaceRouter.acquireCaptureLease) safely replay.
-      lease?.release()
+      // Restore the real playhead before replaying a deferred visualization
+      // request. Export swept the clock through synthetic frame times; the
+      // newly active surface must render at the restored time, not that stale
+      // request-time export position.
       this.clock.seek(resumeAt)
+      if (lease) {
+        try {
+          await lease.release(this.clock.currentTime)
+        } catch (err) {
+          console.error('Deferred visualization switch failed:', err)
+          document.body.classList.toggle(
+            'visualization-guitar',
+            this.surfaces.currentMode === 'guitar',
+          )
+          if (
+            this.store.state.visualizationForced === null &&
+            this.store.state.visualizationMode === 'guitar'
+          ) {
+            this.store.setVisualizationMode('piano')
+          }
+        }
+      }
       if (metronomeWasRunning) this.metronome.start()
       this.store.setState('status', 'ready')
       if (wasPlaying) {
@@ -1622,6 +1656,7 @@ export class App {
   }
 
   resetInteractionState(): void {
+    this.releaseActivePianoPointerNote()
     this.clock.pause()
     this.clock.seek(0)
     this.synth.pause()
@@ -1693,6 +1728,7 @@ export class App {
   dispose(): void {
     for (const unsub of this.unsubs) unsub()
     this.unsubs = []
+    this.releaseActivePianoPointerNote()
     this.releaseAllLiveNotes()
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
     window.removeEventListener('blur', this.onWindowBlur)

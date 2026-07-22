@@ -160,6 +160,8 @@ export class PracticeEngine {
   // `setVisibleTracks`. Pass `null` to require every pitch again.
   setPitchFilter(filter: ((pitches: ReadonlySet<number>) => Set<number>) | null): void {
     const previousWaitStep = this.waiting ? (this.steps[this.nextStepIdx] ?? null) : null
+    const previousAccepted = new Set(this.accepted)
+    const previousChordStartMs = this.chordStartMs
     this.pitchFilter = filter
     this.rebuildSteps()
     this.releaseInternalState()
@@ -167,7 +169,11 @@ export class PracticeEngine {
       this.publish()
       return
     }
-    if (previousWaitStep && this.reengageFilteredWait(previousWaitStep)) return
+    if (
+      previousWaitStep &&
+      this.reconcileFilteredWait(previousWaitStep, previousAccepted, previousChordStartMs)
+    )
+      return
     this.recomputeNextStep(this.clock.currentTime)
     if (this.engageWaitIfDue(this.clock.currentTime)) return
     this.publish()
@@ -175,6 +181,8 @@ export class PracticeEngine {
 
   setVisibleTracks(ids: Iterable<string> | null): void {
     const previousWaitStep = this.waiting ? (this.steps[this.nextStepIdx] ?? null) : null
+    const previousAccepted = new Set(this.accepted)
+    const previousChordStartMs = this.chordStartMs
     this.visibleTrackIds = ids ? new Set(ids) : null
     this.rebuildSteps()
     this.releaseInternalState()
@@ -182,7 +190,11 @@ export class PracticeEngine {
       this.publish()
       return
     }
-    if (previousWaitStep && this.reengageFilteredWait(previousWaitStep)) return
+    if (
+      previousWaitStep &&
+      this.reconcileFilteredWait(previousWaitStep, previousAccepted, previousChordStartMs)
+    )
+      return
     this.recomputeNextStep(this.clock.currentTime)
     if (this.engageWaitIfDue(this.clock.currentTime)) return
     this.publish()
@@ -301,16 +313,33 @@ export class PracticeEngine {
     return true
   }
 
-  private reengageFilteredWait(previousStep: PracticeStep): boolean {
+  private reconcileFilteredWait(
+    previousStep: PracticeStep,
+    previousAccepted: ReadonlySet<number>,
+    previousChordStartMs: number | null,
+  ): boolean {
     if (!this.enabled) return false
     const idx = this.steps.findIndex(
       (step) =>
         Math.abs(step.time - previousStep.time) <= STEP_GROUPING_SEC &&
         setsIntersect(step.pitches, previousStep.pitches),
     )
-    if (idx < 0) return false
+    if (idx < 0) {
+      const resumeAt = previousStep.time + RESUME_NUDGE_SEC
+      this.earliestRearmTime = resumeAt + REARM_BUFFER_SEC
+      this.recomputeNextStep(resumeAt)
+      this.publish()
+      this.callbacks.onWaitEnd(resumeAt)
+      return true
+    }
     this.nextStepIdx = idx
-    this.engageWait(this.steps[idx]!)
+    const step = this.steps[idx]!
+    this.waiting = true
+    this.accepted = new Set(Array.from(previousAccepted).filter((pitch) => step.pitches.has(pitch)))
+    this.pending = new Set(Array.from(step.pitches).filter((pitch) => !this.accepted.has(pitch)))
+    this.chordStartMs = this.accepted.size > 0 ? previousChordStartMs : null
+    if (this.pending.size === 0) this.advancePastCurrentStep()
+    else this.publish()
     return true
   }
 

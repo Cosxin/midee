@@ -371,6 +371,23 @@ const dropHighPitches = (pitches: ReadonlySet<number>): Set<number> =>
   new Set([...pitches].filter((p) => p < 100))
 
 describe('PracticeEngine.setPitchFilter — unsupported-voice scoring', () => {
+  it('preserves articulation start time when an accepted pitch survives filtering', () => {
+    const { clock, engine } = makeEngine(
+      midiWithNotes([
+        { pitch: 60, time: 2 },
+        { pitch: 64, time: 2 },
+        { pitch: 67, time: 2 },
+      ]),
+    )
+    let nowMs = 1000
+    ;(engine as unknown as { nowMs: () => number }).nowMs = () => nowMs
+    clock.emit(2.01)
+    expect(engine.notePressed(60).kind).toBe('accepted')
+    engine.setPitchFilter((pitches) => new Set([...pitches].filter((pitch) => pitch !== 67)))
+    nowMs = 1123
+    expect(engine.notePressed(64)).toMatchObject({ kind: 'advanced', articulationMs: 123 })
+  })
+
   it('narrows a mixed chord to only the pitches the filter allows', () => {
     const { engine } = makeEngine(
       midiWithNotes([

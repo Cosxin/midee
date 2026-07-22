@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MidiFile } from '../../../core/midi/types'
 import type { AppServices } from '../../../core/services'
 import { createLearnState, type LearnState } from '../../core/LearnState'
-import { PlayAlongEngine } from './engine'
+import { guitarPitchFilter, PlayAlongEngine } from './engine'
 
 // Fake clock that speaks to the same surface the engine uses. Tests tick
 // directly by calling `emit` with a time — no RAF, no AudioContext.
@@ -197,6 +197,12 @@ function makeMidiWithUnsupportedGuitarNote(): MidiFile {
 }
 
 describe('PlayAlongEngine guitar visualization — unsupported-voice scoring', () => {
+  it('never requires more pitches than can be assigned to six strings', () => {
+    const required = guitarPitchFilter(new Set([40, 41, 42, 43, 44, 45, 46]))
+    expect(required.size).toBeLessThanOrEqual(6)
+    for (const pitch of required) expect([40, 41, 42, 43, 44, 45, 46]).toContain(pitch)
+  })
+
   it('piano mode requires every pitch, unfiltered', () => {
     const { services, learnState } = makeServices()
     ;(
@@ -221,6 +227,52 @@ describe('PlayAlongEngine guitar visualization — unsupported-voice scoring', (
 })
 
 describe('PlayAlongEngine', () => {
+  it('keeps an equal-pitch held bonus alive until every voice releases', () => {
+    const { services, clock, learnState } = makeServices()
+    const midi = makeMidi()
+    midi.tracks[0]!.notes = [{ pitch: 60, time: 2, duration: 1, velocity: 1 }]
+    const engine = new PlayAlongEngine({ services, learnState })
+    engine.attach(midi)
+    engine.setWaitEnabled(true)
+    engine.play()
+    clock.emit(1.995)
+    engine.onNoteOn({
+      pitch: 60,
+      velocity: 1,
+      clockTime: 2,
+      source: 'midi',
+      voiceId: 'midi:a',
+    })
+    engine.onNoteOn({
+      pitch: 60,
+      velocity: 1,
+      clockTime: 2,
+      source: 'guitar',
+      voiceId: 'guitar:b',
+    })
+    clock.emit(2.1)
+    const before = engine.state.heldTicks
+    engine.onNoteOff({
+      pitch: 60,
+      velocity: 0,
+      clockTime: 2.2,
+      source: 'midi',
+      voiceId: 'midi:a',
+    })
+    clock.emit(2.2)
+    expect(engine.state.heldTicks).toBeGreaterThan(before)
+    const afterOne = engine.state.heldTicks
+    engine.onNoteOff({
+      pitch: 60,
+      velocity: 0,
+      clockTime: 2.3,
+      source: 'guitar',
+      voiceId: 'guitar:b',
+    })
+    clock.emit(2.3)
+    expect(engine.state.heldTicks).toBe(afterOne)
+  })
+
   it('applies speed preset to clock and synth', () => {
     const { services, clock, synth, learnState } = makeServices()
     const engine = new PlayAlongEngine({ services, learnState })

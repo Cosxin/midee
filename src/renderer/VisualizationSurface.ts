@@ -64,6 +64,7 @@ export interface VisualizationSurface {
   // ── Frame data (scheduled/timeline notes) ───────────────────────────
   loadMidi(source: VisualizationFrameSource): void
   clearMidi(): void
+  setTrackVisible(trackId: string, visible: boolean): void
 
   // ── Live voices ──────────────────────────────────────────────────────
   setLiveNoteStore(store: LiveVoiceSource): void

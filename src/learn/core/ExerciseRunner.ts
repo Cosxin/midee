@@ -70,45 +70,52 @@ export class ExerciseRunner {
 
   async launch(descriptor: ExerciseDescriptor): Promise<void> {
     if (this.currentExercise) this.close('abandoned')
-
-    if (descriptor.preload) await descriptor.preload()
-
-    // Build the session + exercise up-front but don't publish them onto
-    // `this` until `mount` succeeds. If mount throws, a subsequent launch
-    // shouldn't observe a half-wired previous exercise.
-    const session = new Session(this.nowMs)
-    this.session = session
-    const ctx: ExerciseContext = {
-      descriptor,
-      services: this.services,
-      learnState: this.learnState,
-      progress: this.progress,
-      overlay: this.overlay,
-      host: this.host,
-      onClose: (reason) => this.onClose(reason),
-      log: this.buildLog(descriptor),
-      storage: this.buildStorage(descriptor),
-    }
-
-    const ex = descriptor.factory(ctx)
+    let ex: Exercise | null = null
+    let mounted = false
     try {
+      if (descriptor.preload) await descriptor.preload()
+      const session = new Session(this.nowMs)
+      this.session = session
+      const ctx: ExerciseContext = {
+        descriptor,
+        services: this.services,
+        learnState: this.learnState,
+        progress: this.progress,
+        overlay: this.overlay,
+        host: this.host,
+        onClose: (reason) => this.onClose(reason),
+        log: this.buildLog(descriptor),
+        storage: this.buildStorage(descriptor),
+      }
+      ex = descriptor.factory(ctx)
       await ex.mount(this.host)
+      mounted = true
+      this.currentExercise = ex
+      this.currentDescriptor = descriptor
+      session.start()
+      ex.start()
+      this.subscribe(ex)
+
+      trackEvent('exercise_started', {
+        exercise_id: descriptor.id,
+        category: descriptor.category,
+        difficulty: descriptor.difficulty,
+      })
     } catch (err) {
+      this.unsubscribe()
+      if (mounted && ex) {
+        try {
+          ex.stop()
+        } catch {}
+        try {
+          ex.unmount()
+        } catch {}
+      }
+      this.currentExercise = null
+      this.currentDescriptor = null
       this.session = null
       throw err
     }
-
-    this.currentExercise = ex
-    this.currentDescriptor = descriptor
-    session.start()
-    ex.start()
-    this.subscribe(ex)
-
-    trackEvent('exercise_started', {
-      exercise_id: descriptor.id,
-      category: descriptor.category,
-      difficulty: descriptor.difficulty,
-    })
   }
 
   close(reason: 'completed' | 'abandoned' = 'completed'): ExerciseResult | null {

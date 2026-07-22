@@ -209,6 +209,35 @@ describe('ExerciseRunner', () => {
     expect(captured!.noteOnCalls).toBe(2)
   })
 
+  it('clears runner state and unmounts when start throws', async () => {
+    const bus = new InputBus()
+    const runner = makeRunner(
+      bus,
+      createLearnProgressStore(() => '2026-04-24'),
+    )
+    let exercise!: TestExercise
+    const descriptor: ExerciseDescriptor = {
+      id: 'test.start-failure',
+      title: 'Failure',
+      category: 'ear-training',
+      difficulty: 'beginner',
+      blurb: '',
+      factory: () => {
+        exercise = makeExercise(descriptor, null)
+        exercise.start = () => {
+          exercise.startCalls++
+          throw new Error('start failed')
+        }
+        return exercise
+      },
+    }
+    await expect(runner.launch(descriptor)).rejects.toThrow('start failed')
+    expect(runner.isActive).toBe(false)
+    expect(runner.activeId).toBeNull()
+    expect(exercise.stopCalls).toBe(1)
+    expect(exercise.unmountCalls).toBe(1)
+  })
+
   it('marks abandoned closes as incomplete regardless of exercise result', async () => {
     const bus = new InputBus()
     const progress = createLearnProgressStore(() => '2026-04-24')

@@ -22,7 +22,7 @@ export type GuitarSurfaceFactory = () => Promise<VisualizationSurface>
  * deferred instead and applied once `release()` runs. */
 export interface CaptureLease {
   readonly surface: VisualizationSurface
-  release(): void
+  release(currentTime: number): Promise<void>
 }
 
 interface CachedState {
@@ -36,6 +36,7 @@ interface CachedState {
   practiceAccepted: ReadonlySet<VisualizationHitId> | null
   practiceTrackIds: readonly string[] | null
   resize: { width: number; height: number; resolution?: number } | null
+  trackVisibility: Map<string, boolean>
 }
 
 function emptyCache(): CachedState {
@@ -50,6 +51,7 @@ function emptyCache(): CachedState {
     practiceAccepted: null,
     practiceTrackIds: null,
     resize: null,
+    trackVisibility: new Map(),
   }
 }
 
@@ -106,7 +108,9 @@ export class SurfaceRouter implements VisualizationSurface {
   private requestToken = 0
 
   private leaseHolder: VisualizationSurface | null = null
-  private pendingSwitch: { mode: VisualizationMode; time: number } | null = null
+  private leaseBarrierToken = 0
+  private lastLeaseReleaseTime = 0
+  private pendingSwitch: { mode: VisualizationMode } | null = null
   private pendingSwitchWaiters: Array<{
     resolve: () => void
     reject: (reason: unknown) => void
@@ -122,6 +126,7 @@ export class SurfaceRouter implements VisualizationSurface {
   constructor(
     private readonly piano: VisualizationSurface,
     private readonly guitarFactory: GuitarSurfaceFactory,
+    private readonly beforeModeChange?: (from: VisualizationMode, to: VisualizationMode) => void,
   ) {
     this.active = piano
     this.rebindActiveSignals(piano)
@@ -138,10 +143,7 @@ export class SurfaceRouter implements VisualizationSurface {
   async setMode(mode: VisualizationMode, currentTime: number): Promise<void> {
     const token = ++this.requestToken
     if (this.leaseHolder) {
-      this.pendingSwitch = { mode, time: currentTime }
-      return new Promise<void>((resolve, reject) => {
-        this.pendingSwitchWaiters.push({ resolve, reject })
-      })
+      return this.deferSwitch(mode)
     }
     await this.applyMode(mode, currentTime, token)
   }
@@ -159,10 +161,15 @@ export class SurfaceRouter implements VisualizationSurface {
       // roll back (e.g. reverting the persisted preference) rather than this
       // router silently pretending the switch worked.
       next = await this.ensureGuitar()
+      // A stale request must never overwrite a newer deferred request.
+      if (token !== this.requestToken) return
+      if (token <= this.leaseBarrierToken) {
+        if (this.leaseHolder) return this.deferSwitch(mode)
+        currentTime = this.lastLeaseReleaseTime
+      }
       // Latest-wins: a newer setMode() may have landed (and possibly already
       // resolved to piano) while we awaited guitar's init. A stale resolution
       // must not clobber it.
-      if (token !== this.requestToken) return
     } else {
       next = this.piano
     }
@@ -172,6 +179,8 @@ export class SurfaceRouter implements VisualizationSurface {
       this.mode = mode
       return
     }
+
+    this.beforeModeChange?.(this.mode, mode)
 
     if (prev === this.piano) {
       for (const layer of this.layers) prev.removeLayer(layer)
@@ -190,6 +199,13 @@ export class SurfaceRouter implements VisualizationSurface {
     next.setVisible(this.desiredVisible)
     next.renderStaticFrame(currentTime)
     document.body.classList.toggle('canvas-hidden', !this.desiredVisible)
+  }
+
+  private deferSwitch(mode: VisualizationMode): Promise<void> {
+    this.pendingSwitch = { mode }
+    return new Promise<void>((resolve, reject) => {
+      this.pendingSwitchWaiters.push({ resolve, reject })
+    })
   }
 
   private ensureGuitar(): Promise<VisualizationSurface> {
@@ -229,6 +245,7 @@ export class SurfaceRouter implements VisualizationSurface {
     if (c.theme) surface.setTheme(c.theme)
     surface.setPracticeHints(c.practicePending, c.practiceAccepted)
     surface.setPracticeTrackFocus(c.practiceTrackIds)
+    for (const [trackId, visible] of c.trackVisibility) surface.setTrackVisible(trackId, visible)
     // Replays the last resize this router was told about so a surface built
     // long after boot (guitar, on first switch) starts with correct geometry
     // instead of whatever its own constructor happened to default to.
@@ -251,33 +268,34 @@ export class SurfaceRouter implements VisualizationSurface {
   // ── Capture lease (MP4 export) ──────────────────────────────────────────
 
   acquireCaptureLease(): CaptureLease {
+    if (this.leaseHolder) throw new Error('visualization capture lease already active')
     this.leaseHolder = this.active
-    let released = false
+    this.leaseBarrierToken = this.requestToken
+    let releasePromise: Promise<void> | null = null
     return {
       surface: this.leaseHolder,
-      release: () => {
-        if (released) return
-        released = true
-        this.leaseHolder = null
-        const pending = this.pendingSwitch
-        this.pendingSwitch = null
-        const waiters = this.pendingSwitchWaiters
-        this.pendingSwitchWaiters = []
-        if (pending) {
-          // Resolve every request that was coalesced under the lease only
-          // after the latest one has actually applied. This keeps callers'
-          // promises truthful while preserving latest-request-wins.
-          void this.setMode(pending.mode, pending.time).then(
-            () => {
+      release: (currentTime: number) => {
+        if (releasePromise) return releasePromise
+        releasePromise = (async () => {
+          this.lastLeaseReleaseTime = currentTime
+          this.leaseHolder = null
+          const pending = this.pendingSwitch
+          this.pendingSwitch = null
+          const waiters = this.pendingSwitchWaiters
+          this.pendingSwitchWaiters = []
+          if (pending) {
+            try {
+              await this.setMode(pending.mode, currentTime)
               for (const waiter of waiters) waiter.resolve()
-            },
-            (err: unknown) => {
+            } catch (err) {
               for (const waiter of waiters) waiter.reject(err)
-            },
-          )
-        } else {
-          for (const waiter of waiters) waiter.resolve()
-        }
+              throw err
+            }
+          } else {
+            for (const waiter of waiters) waiter.resolve()
+          }
+        })()
+        return releasePromise
       },
     }
   }
@@ -296,15 +314,23 @@ export class SurfaceRouter implements VisualizationSurface {
   }
 
   loadMidi(source: VisualizationFrameSource): void {
+    this.cached.trackVisibility.clear()
     this.cached.midi = source
     this.piano.loadMidi(source)
     this.guitar?.loadMidi(source)
   }
 
   clearMidi(): void {
+    this.cached.trackVisibility.clear()
     this.cached.midi = null
     this.piano.clearMidi()
     this.guitar?.clearMidi()
+  }
+
+  setTrackVisible(trackId: string, visible: boolean): void {
+    this.cached.trackVisibility.set(trackId, visible)
+    this.piano.setTrackVisible(trackId, visible)
+    this.guitar?.setTrackVisible(trackId, visible)
   }
 
   setLiveNoteStore(store: LiveVoiceSource): void {

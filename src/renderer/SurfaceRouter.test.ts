@@ -59,6 +59,7 @@ function fakeSurface(
     destroy: vi.fn(),
     loadMidi: vi.fn(),
     clearMidi: vi.fn(),
+    setTrackVisible: vi.fn(),
     setLiveNoteStore: vi.fn(),
     setLoopNoteStore: vi.fn(),
     setLiveNotesVisible: vi.fn(),
@@ -326,6 +327,32 @@ describe('SurfaceRouter', () => {
   })
 
   describe('setMode switching', () => {
+    it('caches track visibility and replays it before a lazy guitar is promoted', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const router = new SurfaceRouter(piano, async () => guitar)
+
+      router.setTrackVisible('melody', false)
+      expect(piano.setTrackVisible).toHaveBeenCalledWith('melody', false)
+      expect(guitar.setTrackVisible).not.toHaveBeenCalled()
+      await router.setMode('guitar', 0)
+      expect(guitar.setTrackVisible).toHaveBeenCalledWith('melody', false)
+
+      router.setTrackVisible('melody', true)
+      expect(piano.setTrackVisible).toHaveBeenLastCalledWith('melody', true)
+      expect(guitar.setTrackVisible).toHaveBeenLastCalledWith('melody', true)
+    })
+
+    it('clears cached track visibility for a new MIDI before lazy replay', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const router = new SurfaceRouter(piano, async () => guitar)
+      router.setTrackVisible('reused-id', false)
+      router.loadMidi({ name: 'new.mid' } as never)
+      await router.setMode('guitar', 0)
+      expect(guitar.setTrackVisible).not.toHaveBeenCalledWith('reused-id', false)
+    })
+
     it('pauses + hides the outgoing surface and wakes + shows the incoming one at the given time', async () => {
       const piano = fakeSurface('piano')
       const guitar = fakeSurface('guitar')
@@ -463,6 +490,71 @@ describe('SurfaceRouter', () => {
 
   // ── Requirement 4: capture lease ────────────────────────────────────────
   describe('capture lease', () => {
+    it('rejects a nested lease and release is idempotent', async () => {
+      const router = new SurfaceRouter(fakeSurface('piano'), async () => fakeSurface('guitar'))
+      const lease = router.acquireCaptureLease()
+      expect(() => router.acquireCaptureLease()).toThrow('already active')
+      const firstRelease = lease.release(1)
+      const secondRelease = lease.release(2)
+      expect(secondRelease).toBe(firstRelease)
+      await firstRelease
+      expect(() => router.acquireCaptureLease()).not.toThrow()
+    })
+
+    it('does not promote a guitar whose factory resolves after piano was leased', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const { factory, resolve } = deferredFactory(guitar)
+      const router = new SurfaceRouter(piano, factory)
+      const switching = router.setMode('guitar', 2)
+      const lease = router.acquireCaptureLease()
+      resolve()
+      await Promise.resolve()
+      expect(router.currentMode).toBe('piano')
+      expect(lease.surface).toBe(piano)
+      await lease.release(9)
+      await switching
+      expect(guitar.renderStaticFrame).toHaveBeenLastCalledWith(9)
+    })
+
+    it('uses restored release time when the lease is released before lazy init resolves', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const { factory, resolve } = deferredFactory(guitar)
+      const router = new SurfaceRouter(piano, factory)
+      const switching = router.setMode('guitar', 99)
+      const lease = router.acquireCaptureLease()
+      await lease.release(7)
+      resolve()
+      await switching
+      expect(guitar.renderStaticFrame).toHaveBeenLastCalledWith(7)
+    })
+
+    it('does not let a stale guitar init replace a newer deferred piano request', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const { factory, resolve } = deferredFactory(guitar)
+      const router = new SurfaceRouter(piano, factory)
+      const staleGuitar = router.setMode('guitar', 1)
+      const lease = router.acquireCaptureLease()
+      const latestPiano = router.setMode('piano', 2)
+      resolve()
+      await lease.release(7)
+      await Promise.all([staleGuitar, latestPiano])
+      expect(router.currentMode).toBe('piano')
+      expect(guitar.resumeAutoRender).not.toHaveBeenCalled()
+    })
+
+    it('rejects deferred callers when the lazy factory fails', async () => {
+      const router = new SurfaceRouter(fakeSurface('piano'), async () => {
+        throw new Error('factory failed')
+      })
+      const lease = router.acquireCaptureLease()
+      const switching = router.setMode('guitar', 0)
+      await expect(lease.release(7)).rejects.toThrow('factory failed')
+      await expect(switching).rejects.toThrow('factory failed')
+    })
+
     it('pins the currently active surface', async () => {
       const piano = fakeSurface('piano')
       const guitar = fakeSurface('guitar')
@@ -483,7 +575,7 @@ describe('SurfaceRouter', () => {
       // Deferred — guitar must not have been constructed or promoted yet.
       expect(router.currentMode).toBe('piano')
 
-      lease.release()
+      await lease.release(0)
       await switching
       expect(router.currentMode).toBe('guitar')
     })
@@ -498,7 +590,7 @@ describe('SurfaceRouter', () => {
       void router.setMode('piano', 0)
       const last = router.setMode('guitar', 3)
 
-      lease.release()
+      await lease.release(3)
       await last
       expect(router.currentMode).toBe('guitar')
       expect(guitar.renderStaticFrame).toHaveBeenCalledWith(3)
