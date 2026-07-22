@@ -5,20 +5,48 @@
 
 ## Overview
 
-Midee includes native 6-string guitar fretboard visualization alongside its standard 88-key piano roll. The guitar engine renders note events on a 24-fret fretboard with waterfall note lanes, real-time live performance mapping, multi-track visibility filtering, and WebCodecs MP4 video export.
+Midee includes native 6-string guitar fretboard visualization alongside its
+standard 88-key piano roll. The guitar engine renders note events on a 24-fret
+fretboard with waterfall note lanes, real-time live performance mapping,
+multi-track visibility filtering, a localized keyboard-accessible fret grid,
+and WebCodecs MP4 video export.
 
 ### Timbre Independence
 
 Visualization mode (`piano` vs `guitar`) is **completely independent** of output audio timbre:
+
 - Users can switch between Piano roll and Guitar fretboard surfaces without altering audio synthesis settings.
-- MIDI notes can be visualized on the Guitar surface while playing back with sampled piano, synth plucks, or any soundfont instrument.
+- MIDI notes can be visualized on the Guitar surface while playing back with any selected sampled or synthesized Midee instrument.
 - Audio synthesis engine settings (e.g. Tone.js samplers or pluck synths) remain decoupled from the active canvas visualization surface.
+
+---
+
+## Quick Start
+
+1. Open a `.mid` file in **Play**, or enter **Live** to use a MIDI controller,
+   the computer keyboard, or the on-screen fretboard.
+2. Choose **Guitar** in the Piano/Guitar view selector in the top strip.
+3. Click or touch a fret to play that exact position. Drag horizontally, use a
+   horizontal wheel gesture, or hold Shift while scrolling to pan across all
+   24 frets.
+4. To use the fretboard without a pointer in Play or Guitar Play-Along, Tab to
+   it and follow the keyboard controls below. Live currently reserves Tab for
+   its session shortcut; see the limitation below.
+5. With a MIDI file loaded in **Play**, keep **Guitar** selected when starting
+   MP4 export. The active surface is fixed for the duration of that export.
+   Live-only performances cannot be exported directly as video.
+
+The selected visualization is stored in `localStorage` as
+`midee.visualizationMode` and survives navigation and reloads. An exercise that
+requires the piano surface temporarily overrides the selection without
+rewriting the saved Guitar preference.
 
 ---
 
 ## Technical Profile & Fretboard Geometry
 
-Midee uses a standard 6-string, 24-fret profile:
+Midee uses a standard 6-string, 24-fret profile. Each string exposes 25
+positions: the open string plus frets 1 through 24.
 
 - **Tuning:** Standard EADGBE
   - String 1 (High E): E4 (MIDI pitch 64)
@@ -51,8 +79,46 @@ Midee uses a standard 6-string, 24-fret profile:
 5. **Touch & Mobile Ergonomics:**
    - Fretboard layout enforces string heights and touch target dimensions of at least 44 px (`MIN_FRET_TARGET_PX = 44`) for high touch accuracy on mobile screens.
    - Includes horizontal fretboard panning/scrolling so full 24-fret positions are accessible on smaller viewports.
-6. **Active-Surface MP4 Export:**
-   - WebCodecs video export (`VideoExporter`) renders whichever surface is currently active. Exporting video while Guitar mode is selected produces an MP4 video of the 6-string fretboard visualization.
+6. **Keyboard & Assistive Technology:**
+   - A persistent 6-row × 25-column DOM grid mirrors all 150 canvas positions with localized note, string, and fret labels.
+   - The grid uses one roving tab stop; arrow navigation pans the corresponding fret into view and suppresses playback auto-follow while keyboard focus remains on the fretboard.
+   - The DOM hit areas are pointer-transparent, so mouse and touch gestures continue to belong to the canvas.
+7. **Active-Surface MP4 Export:**
+   - WebCodecs video export (`VideoExporter`) is available for a loaded MIDI file in Play and renders whichever surface is active when export starts. Exporting while Guitar is selected produces an MP4 of the 6-string fretboard visualization; Live-only performances are not directly video-exportable.
+   - Guitar adapts its layout to the requested output dimensions. The portrait/square **Focus** and **Speed** presets alter the piano roll's pitch range and scroll speed only, so they do not change Guitar output.
+
+---
+
+## Accessible Fretboard Controls
+
+The accessibility layer is a native-button grid with six displayed rows
+(String 1 / high E at the top through String 6 / low E at the bottom) and 25
+columns (frets 0 through 24). Its labels follow the active Midee locale.
+
+| Key | Action |
+| --- | --- |
+| `Tab` / `Shift+Tab` | In Play or Guitar Play-Along, enter or leave the fretboard through its single roving tab stop. |
+| Left/Right arrow | Move one fret lower or higher. |
+| Up/Down arrow | Move one displayed string up or down. |
+| `Home` / `End` | Move to fret 0 or fret 24 on the current string. |
+| `Enter` / `Space` | Play a short note at the focused string/fret position. |
+
+Keyboard navigation stays inside the grid instead of triggering the global
+octave or transport shortcuts. Moving focus recenters later frets, and a window
+resize keeps the focused position in view. A pointer or wheel gesture on the
+canvas releases grid focus; normal manual-pan timing and automatic fret-follow
+rules then apply. The first keyboard or pointer interaction also participates
+in Midee's normal browser audio-unlock path.
+
+**Live limitation:** Live mode currently reserves `Tab` for its session
+recording shortcut, so sequential Tab entry into the fretboard is unavailable
+there. Once a fret button has focus, the grid's own navigation and activation
+keys work as described above. Pointer, computer-keyboard, and MIDI input remain
+available in Live.
+
+The grid is hidden and inert whenever the Guitar surface is not visible, and it
+is removed on teardown. It therefore leaves no stale controls in the tab order
+during a mode switch or piano-only exercise.
 
 ---
 
@@ -91,8 +157,10 @@ Live performance notes are assigned per render frame via `assignLiveGuitarVoices
 
 ## Learn Mode Preference Persistence
 
+- **Current Exercise Boundary:** Play-Along is the current Learn exercise that keeps Guitar available. The other current Learn exercises require the 88-key piano surface.
 - **Piano-Forced Exercises:** Exercises in Learn mode designed specifically for 88-key piano temporarily force piano visualization (`visualizationForced = 'piano'`).
-- **Preference Restoration:** When leaving a piano-only exercise or unsetting the forced state (`visualizationForced = null`), the UI automatically restores the user's persisted visualization preference (`visualizationMode`, saved in `localStorage` as `'piano'` or `'guitar'`).
+- **Forced-State Feedback:** While such an exercise is active, the view selector is disabled and announces why piano visualization is required; the Guitar canvas and accessibility grid are hidden.
+- **Preference Restoration:** When leaving a piano-only exercise or unsetting the forced state (`visualizationForced = null`), the UI automatically restores the user's persisted visualization preference (`visualizationMode`, saved in `localStorage` as `'piano'` or `'guitar'`). Returning to Play or Live makes the restored Guitar surface and fret grid available again.
 
 ---
 
@@ -113,4 +181,34 @@ For background research on ML-based guitar audio transcription (evaluating Basic
 
 - [Guitar Transcription Model Evaluation](./GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md)
 
-*Note:* That document represents an offline research spike. Audio transcription models evaluated in that report are **not adopted** in Midee v1.
+**Integration decision (2026-07-22):** that document represents an isolated
+research spike. No evaluated audio-transcription model or dependency is
+imported by the production app. Midee v1 Guitar mode accepts note events from
+MIDI, computer-keyboard, and direct fretboard input; it does not accept
+microphone or Pi guitar audio.
+
+---
+
+## Verification
+
+The normal repository gate covers the guitar unit, integration, localization,
+accessibility, and track-visibility behavior:
+
+```bash
+npm run check
+```
+
+Browser coverage includes MIDI playback, live MIDI and computer-keyboard input,
+the accessible fret grid, pointer/touch interaction, Play-Along gating,
+Learn-mode restoration, and surface ownership:
+
+```bash
+npm run test:e2e
+```
+
+The heavy suite additionally creates and parses a real 720p, 24 fps,
+video-only Guitar MP4:
+
+```bash
+npm run test:e2e:heavy
+```

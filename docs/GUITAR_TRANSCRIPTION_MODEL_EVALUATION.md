@@ -6,6 +6,13 @@ benchmarks + wording fixes 2026-07-21 (M1R2)
 **Owner artifacts:** [`tools/guitar-model-spike/`](../tools/guitar-model-spike/) (isolated tooling, deterministic manifest/runner), this document.
 **Does not touch:** root `package.json`/`package-lock.json`, `src/`, or any shipped Midee code path.
 
+**Integration decision (2026-07-22):** No evaluated model was adopted in
+Midee v1. Shipped Guitar mode accepts note events from MIDI,
+computer-keyboard, and direct fretboard input rather than raw audio. Basic
+Pitch remains the most direct browser experiment candidate; the GAPS
+checkpoints remain Python/offline candidates pending licensing,
+representative polyphonic evaluation, and target-hardware validation.
+
 > **M1R correction notice:** the original M1 pass of this document
 > concluded that GAPS / high-resolution guitar transcription had **no
 > publicly available code or weights** and was a hard blocker. That
