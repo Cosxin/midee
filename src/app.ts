@@ -692,7 +692,7 @@ export class App {
     document.addEventListener('visibilitychange', this.onVisibilityChange)
     window.addEventListener('blur', this.onWindowBlur)
     window.addEventListener('pointerdown', this.onFirstPointerDown, { passive: true })
-    window.addEventListener('keydown', this.onFirstKeyDown, { passive: true })
+    window.addEventListener('keydown', this.onFirstKeyDown, { capture: true, passive: true })
 
     this.modeContext = {
       services: this.services,
@@ -1691,7 +1691,7 @@ export class App {
     this.clock.prime()
     this.synth.primeLiveInput()
     window.removeEventListener('pointerdown', this.onFirstPointerDown)
-    window.removeEventListener('keydown', this.onFirstKeyDown)
+    window.removeEventListener('keydown', this.onFirstKeyDown, true)
   }
 
   private applyTheme(theme: Theme): void {
@@ -1737,7 +1737,7 @@ export class App {
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
     window.removeEventListener('blur', this.onWindowBlur)
     window.removeEventListener('pointerdown', this.onFirstPointerDown)
-    window.removeEventListener('keydown', this.onFirstKeyDown)
+    window.removeEventListener('keydown', this.onFirstKeyDown, true)
     this.pianoRenderer.canvas.removeEventListener('pointerdown', this.onCanvasPointerDown)
     this.pianoRenderer.canvas.removeEventListener('pointermove', this.onCanvasPointerMove)
     this.pianoRenderer.canvas.removeEventListener('pointerup', this.onCanvasPointerUp)

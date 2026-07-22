@@ -79,11 +79,19 @@ test.describe('Guitar mobile (touch)', () => {
     await expect.poll(() => numberData(page, 'e2e-active-voices')).toBe(0)
 
     const canvas = page.locator('#guitar-surface')
-    const box = (await canvas.boundingBox())!
-
-    await touch(client, 'touchStart', box.x + 72, box.y + box.height * 0.72)
+    const target = page.getByRole('button', { name: 'String 1, fret 0, note E4' })
+    const box = (await target.boundingBox())!
+    const x = box.x + box.width / 2
+    const y = box.y + box.height / 2
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, { x, y })).toBe(
+      'guitar-surface',
+    )
+    await touch(client, 'touchStart', x, y)
     await expect.poll(() => numberData(page, 'e2e-active-voices')).toBeGreaterThan(0)
+    await expect(canvas).toHaveAttribute('data-e2e-surface-hit-count', '1')
     await touch(client, 'touchEnd')
     await expect.poll(() => numberData(page, 'e2e-active-voices')).toBe(0)
+    await expect(canvas).toHaveAttribute('data-e2e-surface-hit-count', '2')
+    await expect(canvas).toHaveAttribute('data-e2e-last-surface-hit', 'note-off:64:5:0')
   })
 })

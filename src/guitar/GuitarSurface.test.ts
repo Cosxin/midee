@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MidiFile } from '../core/midi/types'
 import type { VisualizationSurface } from '../renderer/VisualizationSurface'
 import {
-  AccessibilityTargetCache,
   applyGuitarCanvasVisibility,
   applySurfaceResize,
   assignLiveGuitarVoices,
@@ -327,6 +326,18 @@ describe('surface lifecycle helpers', () => {
     expect(canvas.style.pointerEvents).toBe('')
   })
 
+  it('blurs the accessibility grid for wheel gestures before deciding whether to pan', () => {
+    const surface = new GuitarSurface()
+    const blur = vi.fn()
+    const harness = surface as unknown as {
+      accessibilityGrid: { blur: () => void }
+      onWheel: (event: WheelEvent) => void
+    }
+    harness.accessibilityGrid = { blur }
+    harness.onWheel(new WheelEvent('wheel', { deltaY: 10, cancelable: true }))
+    expect(blur).toHaveBeenCalledOnce()
+  })
+
   it('renders a 30-frame idle grace, wakes, and yields rendering during capture', () => {
     const activity = new GuitarRenderActivity()
     for (let frame = 0; frame < 30; frame++) expect(activity.shouldRender(false)).toBe(true)
@@ -337,16 +348,6 @@ describe('surface lifecycle helpers', () => {
     expect(activity.shouldRender(true)).toBe(false)
     activity.exportMode = false
     expect(activity.shouldRender(true)).toBe(true)
-  })
-
-  it('invalidates accessible targets for resize and pan, but not stable frames', () => {
-    const cache = new AccessibilityTargetCache()
-    expect(cache.needsRebuild(390, 844, 0)).toBe(true)
-    expect(cache.needsRebuild(390, 844, 0)).toBe(false)
-    expect(cache.needsRebuild(390, 844, 44)).toBe(true)
-    expect(cache.needsRebuild(430, 844, 44)).toBe(true)
-    cache.invalidate()
-    expect(cache.needsRebuild(430, 844, 44)).toBe(true)
   })
 
   it('sets capture resolution before resizing the backing store', () => {

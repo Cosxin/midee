@@ -94,6 +94,43 @@ body {
   touch-action: none;
 }
 
+.guitar-accessibility-grid {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.guitar-accessibility-grid__row,
+.guitar-accessibility-grid__cell,
+.guitar-accessibility-grid button {
+  pointer-events: none;
+}
+
+.guitar-accessibility-grid__cell {
+  position: absolute;
+}
+
+.guitar-accessibility-grid button {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.guitar-accessibility-grid button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+@media (forced-colors: active) {
+  .guitar-accessibility-grid button:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 /* Guitar-mode chrome: the keyboard-height drag seam only applies to the
    piano surface. */
 body.visualization-guitar #kbd-resizer {

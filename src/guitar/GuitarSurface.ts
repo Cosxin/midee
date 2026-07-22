@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Rectangle, Text, TextStyle, type Ticker } from 'pixi.js'
+import { Application, Container, Graphics, Text, TextStyle, type Ticker } from 'pixi.js'
 import type { MasterClock } from '../core/clock/MasterClock'
 import type { MidiFile } from '../core/midi/types'
 import type { LiveNote, LiveNoteStore } from '../midi/LiveNoteStore'
@@ -16,6 +16,7 @@ import type { EventSignal } from '../store/eventSignal'
 import { createEventSignal } from '../store/eventSignal'
 import { FretboardInteraction } from './FretboardInteraction'
 import { assignGuitarCluster, precomputeGuitarFingerings } from './fingering'
+import { GuitarAccessibilityGrid } from './GuitarAccessibilityGrid'
 import {
   centeredPanForFret,
   createGuitarLayout,
@@ -24,7 +25,6 @@ import {
   fretboardStringY,
   GUITAR_MAX_FRET,
   GUITAR_STRING_COUNT,
-  guitarPositionLabel,
   highwayLaneX,
   pitchAtPosition,
   positionAtPoint,
@@ -266,21 +266,6 @@ export class GuitarRenderActivity {
   }
 }
 
-export class AccessibilityTargetCache {
-  private signature = ''
-
-  needsRebuild(width: number, height: number, panX: number): boolean {
-    const next = `${width}:${height}:${panX}`
-    if (next === this.signature) return false
-    this.signature = next
-    return true
-  }
-
-  invalidate(): void {
-    this.signature = ''
-  }
-}
-
 export function applySurfaceResize(
   renderer: { resolution: number; resize(width: number, height: number): void },
   width: number,
@@ -308,8 +293,7 @@ export class GuitarSurface implements VisualizationSurface {
   private scene!: Container
   private graphics!: Graphics
   private labels!: Container
-  private accessibleTargets!: Container
-  private accessibleCache = new AccessibilityTargetCache()
+  private accessibilityGrid!: GuitarAccessibilityGrid
   private layout = createGuitarLayout(1, 1)
   private theme: Theme = darkTheme
   private midi: MidiFile | null = null
@@ -328,7 +312,7 @@ export class GuitarSurface implements VisualizationSurface {
   private hiddenTrackIds = new Set<string>()
   private layers: RenderLayer[] = []
   private gestures = new Map<number, PointerGesture>()
-  private interaction = new FretboardInteraction((hit) => this.surfaceHits.set(hit))
+  private interaction = new FretboardInteraction((hit) => this.publishSurfaceHit(hit))
   private activity = new GuitarRenderActivity()
   private clock: MasterClock | null = null
 
@@ -346,8 +330,7 @@ export class GuitarSurface implements VisualizationSurface {
     this.scene = new Container()
     this.graphics = new Graphics()
     this.labels = new Container()
-    this.accessibleTargets = new Container()
-    this.scene.addChild(this.graphics, this.labels, this.accessibleTargets)
+    this.scene.addChild(this.graphics, this.labels)
     this.app.stage.addChild(this.scene)
     this.compatibilityViewport = new Viewport({
       canvasWidth: this.app.screen.width,
@@ -356,6 +339,19 @@ export class GuitarSurface implements VisualizationSurface {
       pixelsPerSecond: 200,
     })
     this.bindCanvasEvents()
+    this.accessibilityGrid = new GuitarAccessibilityGrid({
+      canvas,
+      onActivate: (position, pitch) => {
+        if (!this.activity.exportMode) this.interaction.keyboardActivate(position, pitch)
+      },
+      onFocus: (position) => {
+        if (this.activity.exportMode) return
+        this.panX = centeredPanForFret(position.fret, this.layout)
+        this.interaction.noteManualPan(performance.now())
+        this.renderStaticFrame(this.lastTime)
+      },
+    })
+    if (import.meta.env.VITE_ENABLE_E2E === '1') canvas.dataset.e2eSurfaceHitCount = '0'
     this.resize(window.innerWidth, window.innerHeight)
     window.addEventListener('resize', this.handleResize)
   }
@@ -417,9 +413,11 @@ export class GuitarSurface implements VisualizationSurface {
   resize(width: number, height: number, resolution?: number): void {
     applySurfaceResize(this.app.renderer, width, height, resolution)
     this.layout = createGuitarLayout(width, height)
-    this.panX = Math.min(this.panX, this.layout.maxPan)
+    const focused = this.accessibilityGrid.focusedPosition
+    this.panX = focused
+      ? centeredPanForFret(focused.fret, this.layout)
+      : Math.min(this.panX, this.layout.maxPan)
     this.compatibilityViewport.update({ canvasWidth: width, canvasHeight: height })
-    this.invalidateAccessibleTargets()
     this.rebuildLayers()
     this.renderStaticFrame(this.lastTime)
   }
@@ -452,6 +450,7 @@ export class GuitarSurface implements VisualizationSurface {
   setVisible(visible: boolean): void {
     this.app.stage.visible = visible
     applyGuitarCanvasVisibility(this.app.canvas as HTMLCanvasElement, visible)
+    this.accessibilityGrid.setVisible(visible)
     if (!visible) this.cleanupGestures()
     if (visible) this.renderStaticFrame(this.lastTime)
   }
@@ -533,6 +532,7 @@ export class GuitarSurface implements VisualizationSurface {
     // moment guitar was destroyed.
     for (const layer of this.layers) layer.unmount()
     this.layers = []
+    this.accessibilityGrid.destroy()
     this.app.destroy(false, { children: true })
   }
 
@@ -573,7 +573,11 @@ export class GuitarSurface implements VisualizationSurface {
     )
     const active = this.collectActive()
     const follow = active.find((voice) => voice.position)?.position
-    if (follow && this.interaction.canAutoFollow(performance.now())) {
+    if (
+      follow &&
+      !this.accessibilityGrid.hasFocus &&
+      this.interaction.canAutoFollow(performance.now())
+    ) {
       this.panX = centeredPanForFret(follow.fret, this.layout)
     }
     this.draw(active, currentTime)
@@ -610,6 +614,15 @@ export class GuitarSurface implements VisualizationSurface {
     return [...this.currentWindow.active, ...assignLiveGuitarVoices(liveNotes)]
   }
 
+  private publishSurfaceHit(hit: SurfaceHit): void {
+    this.surfaceHits.set(hit)
+    if (import.meta.env.VITE_ENABLE_E2E === '1') {
+      const canvas = this.app.canvas as HTMLCanvasElement
+      canvas.dataset.e2eSurfaceHitCount = String(Number(canvas.dataset.e2eSurfaceHitCount ?? 0) + 1)
+      canvas.dataset.e2eLastSurfaceHit = `${hit.type}:${hit.pitch}:${hit.string}:${hit.fret}`
+    }
+  }
+
   private draw(active: readonly AssignedGuitarVoice[], currentTime: number): void {
     const g = this.graphics
     g.clear()
@@ -629,6 +642,7 @@ export class GuitarSurface implements VisualizationSurface {
     }
     this.drawPracticeHints(g, active)
     this.activeKeys.set(colors)
+    this.accessibilityGrid.updateGeometry(this.layout, this.panX)
   }
 
   private drawHighway(g: Graphics, currentTime: number): void {
@@ -692,38 +706,6 @@ export class GuitarSurface implements VisualizationSurface {
       color: this.theme.background,
       alpha: 0.96,
     })
-    if (this.accessibleCache.needsRebuild(this.layout.width, this.layout.height, this.panX)) {
-      this.buildAccessibleTargets()
-    }
-  }
-
-  private buildAccessibleTargets(): void {
-    this.accessibleTargets.removeChildren().forEach((child) => {
-      child.destroy()
-    })
-    for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
-      for (let fret = 0; fret <= GUITAR_MAX_FRET; fret++) {
-        const position = { string, fret }
-        const rect = positionRect(position, this.layout, this.panX)
-        if (rect.x + rect.width < FRETBOARD_LABEL_WIDTH || rect.x > this.layout.width) continue
-        const target = new Container()
-        target.position.set(rect.x, rect.y)
-        target.hitArea = new Rectangle(0, 0, rect.width, rect.height)
-        target.eventMode = 'static'
-        target.accessible = true
-        target.accessibleType = 'button'
-        target.accessibleTitle = guitarPositionLabel(position)
-        target.accessibleHint = 'Press Enter or Space to play this note'
-        target.tabIndex = 0
-        target.on('keydown', (event: KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            this.interaction.keyboardActivate(position, pitchAtPosition(position))
-          }
-        })
-        this.accessibleTargets.addChild(target)
-      }
-    }
   }
 
   private drawPracticeHints(g: Graphics, active: readonly AssignedGuitarVoice[]): void {
@@ -845,6 +827,7 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
+    this.accessibilityGrid.blur()
     const point = this.localPoint(event)
     const position = positionAtPoint(point.x, point.y, this.layout, this.panX)
     this.gestures.set(event.pointerId, {
@@ -889,6 +872,7 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private onWheel = (event: WheelEvent): void => {
+    this.accessibilityGrid.blur()
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) && !event.shiftKey) return
     event.preventDefault()
     const delta = event.deltaX || event.deltaY
@@ -901,10 +885,6 @@ export class GuitarSurface implements VisualizationSurface {
     // Export owns the backing-store dimensions until it restores them after capture.
     if (this.activity.exportMode) return
     this.resize(window.innerWidth, window.innerHeight)
-  }
-
-  private invalidateAccessibleTargets(): void {
-    this.accessibleCache.invalidate()
   }
 
   private cleanupGestures(): void {

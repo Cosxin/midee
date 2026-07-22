@@ -48,6 +48,52 @@ async function scrubberValuesAcrossFrames(page: Page, frameCount: number): Promi
 }
 
 test.describe('Guitar visualization', () => {
+  test('keyboard fretboard grid activates notes, owns navigation, and remains pointer-transparent', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await page.locator('#home-live').click()
+    await selectGuitar(page)
+    const grid = page.getByRole('grid', { name: 'Interactive guitar fretboard' })
+    await expect(grid).toHaveAttribute('aria-rowcount', '6')
+    await expect(grid.getByRole('row')).toHaveCount(6)
+    const buttons = grid.getByRole('button')
+    await expect(buttons).toHaveCount(150)
+    const openHighE = page.getByRole('button', { name: 'String 1, fret 0, note E4' })
+    await openHighE.focus()
+    await expect(openHighE).toBeFocused()
+    await page.keyboard.press('End')
+    const highE24 = page.getByRole('button', { name: 'String 1, fret 24, note E6' })
+    await expect(highE24).toBeFocused()
+    await expect.poll(() => numberData(page, 'e2e-pan-x')).toBeGreaterThan(0)
+    await expect(grid.locator('button[tabindex="0"]')).toHaveCount(1)
+    const canvas = page.locator('#guitar-surface')
+    const centerHit = async () => {
+      const box = (await highE24.boundingBox())!
+      return page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.id,
+        { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      )
+    }
+    await expect.poll(centerHit).toBe('guitar-surface')
+    await page.keyboard.press('Enter')
+    await expect(canvas).toHaveAttribute('data-e2e-surface-hit-count', '2')
+    await page.keyboard.press('Space')
+    await expect(canvas).toHaveAttribute('data-e2e-surface-hit-count', '4')
+    await expect(canvas).toHaveAttribute('data-e2e-last-surface-hit', 'note-off:88:5:24')
+    await page.keyboard.press('Tab')
+    await expect(highE24).not.toBeFocused()
+    await page.getByRole('radio', { name: 'Show guitar visualization' }).check()
+    await openHighE.focus()
+    await page.getByRole('radio', { name: 'Show piano visualization' }).check()
+    const hiddenGrid = page.locator('.guitar-accessibility-grid')
+    await expect(hiddenGrid).toBeHidden()
+    await expect(hiddenGrid).toHaveAttribute('inert', '')
+    expect(
+      await hiddenGrid.evaluate((element) => element.contains(document.activeElement)),
+    ).toBe(false)
+  })
+
   test('loads MIDI, switches surfaces, renders the highway/fretboard, and persists', async ({
     page,
   }) => {
