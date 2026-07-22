@@ -1,7 +1,7 @@
 # MIDI Guitar Support & Visualization
 
-**Date:** 2026-07-22  
-**Status:** Canonical Reference / Active Documentation  
+**Date:** 2026-07-22
+**Status:** Canonical Reference / Active Documentation
 
 ## Overview
 
@@ -37,7 +37,7 @@ Midee uses a standard 6-string, 24-fret profile:
 ## Supported Modes & Workflows
 
 1. **Play Mode (Scheduled MIDI):**
-   - Decodes loaded MIDI files using `precomputeGuitarFingerings` (in `src/guitar/fingering.ts`).
+   - Maps notes from loaded decoded MIDI files (`MidiFile`) via `buildGuitarSchedule` and precomputes guitar fingerings using `precomputeGuitarFingerings` (in `src/guitar/GuitarSurface.ts` and `src/guitar/fingering.ts`).
    - Groups note events into 40 ms time clusters, evaluating movement distance penalties against immediately preceding cluster positions (at matching cluster-array indices) and soft MIDI channel affinity across time clusters to schedule 6-string fretboard and highway note events.
 2. **Live Performance (`assignLiveGuitarVoices`):**
    - Active live performance notes are assigned frame-by-frame via `assignLiveGuitarVoices` (in `GuitarSurface.ts`).
