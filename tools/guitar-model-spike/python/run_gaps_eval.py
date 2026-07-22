@@ -20,8 +20,12 @@ Usage:
         --instrument guitar_gaps --revision 689e773723bcafd8c81015b10c03f12675ce16ec
 """
 import argparse
+import hashlib
+import importlib.metadata
 import json
+import re
 import resource
+import sys
 import time
 from pathlib import Path
 
@@ -29,6 +33,83 @@ ROOT = Path(__file__).resolve().parent.parent  # tools/guitar-model-spike/
 ONSET_TOL_SEC = 0.05
 OFFSET_TOL_MIN_SEC = 0.05
 OFFSET_TOL_RATIO = 0.2
+CHECKPOINT_REPO_ID = "xavriley/midi-transcription-models"
+REQUIREMENTS_LOCK = ROOT / "python" / "requirements-lock.txt"
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def dependency_metadata(package_names):
+    """Read installed versions and immutable VCS revisions from PEP 610 metadata."""
+    versions = {}
+    vcs_revisions = {}
+    for package_name in package_names:
+        distribution = importlib.metadata.distribution(package_name)
+        versions[package_name] = distribution.version
+        direct_url_text = distribution.read_text("direct_url.json")
+        if direct_url_text:
+            direct_url = json.loads(direct_url_text)
+            commit_id = direct_url.get("vcs_info", {}).get("commit_id")
+            if commit_id:
+                vcs_revisions[package_name] = commit_id
+    return versions, vcs_revisions
+
+
+def peak_rss_metadata(raw_peak_rss, platform=sys.platform):
+    """Normalize ru_maxrss to KiB; Darwin reports bytes, Linux reports KiB."""
+    raw_unit = "bytes" if platform == "darwin" else "KiB"
+    peak_rss_kb = raw_peak_rss / 1024 if raw_unit == "bytes" else raw_peak_rss
+    return {
+        "platform": platform,
+        "peakRssRaw": raw_peak_rss,
+        "peakRssRawUnit": raw_unit,
+        "peakRssKb": peak_rss_kb,
+    }
+
+
+def resolved_snapshot_revision(checkpoint_path: Path) -> str:
+    """Extract the immutable commit directory returned by hf_hub_download."""
+    parts = checkpoint_path.parts
+    try:
+        snapshots_index = parts.index("snapshots")
+        resolved_revision = parts[snapshots_index + 1]
+    except (ValueError, IndexError) as error:
+        raise ValueError(
+            f"checkpoint path does not identify a Hugging Face snapshot: {checkpoint_path}"
+        ) from error
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", resolved_revision):
+        raise ValueError(
+            "checkpoint path does not identify an immutable 40-character "
+            f"Hugging Face commit SHA: {checkpoint_path}"
+        )
+    return resolved_revision
+
+
+def resolve_checkpoint(instrument: str, revision: str) -> Path:
+    """Explicitly pin and download the checkpoint for `instrument` at
+    `revision` via hf_hub_download, rather than relying on
+    MidiTranscriptionModel's own constructor to resolve one implicitly.
+    The constructor's internal _download_model_if_needed() never accepts a
+    revision argument (it always resolves against the repo's default
+    branch), so a fresh, uncached run of this script without this explicit
+    step could silently fetch main instead of the pinned commit.
+    """
+    from huggingface_hub import hf_hub_download
+
+    instruments_config = json.loads((ROOT / "python" / "instruments.json").read_text())
+    checkpoint_file = instruments_config[instrument]["checkpoint_file"]
+    local_path = hf_hub_download(
+        repo_id=CHECKPOINT_REPO_ID,
+        filename=checkpoint_file,
+        revision=revision,
+    )
+    return Path(local_path)
 
 
 def parse_ground_truth_notes(jams_path: Path):
@@ -150,14 +231,51 @@ def main():
     # through PyTorchModelHubMixin, which (a) hit a real version-skew bug
     # against huggingface-hub>=1.0 in this spike (see docs report) and (b)
     # does a full *repo snapshot* download (~700MB, every instrument's
-    # checkpoint) instead of just the one file needed. The plain
-    # constructor's internal _download_model_if_needed() calls
-    # hf_hub_download() for exactly one file, which is what a real
-    # integration should do too.
+    # checkpoint) instead of just the one file needed.
+    #
+    # We ALSO don't rely on the constructor's own implicit checkpoint
+    # resolution (MidiTranscriptionModel(instrument=...) with no
+    # checkpoint_path) -- its _download_model_if_needed() calls
+    # hf_hub_download() with no `revision` argument, which resolves against
+    # the repo's default branch. That means an unpinned fresh run (empty
+    # HF cache) could silently fetch whatever is on `main` at run time,
+    # not the commit this script/report claims to be pinned to. Instead we
+    # explicitly resolve+download via resolve_checkpoint(revision=...)
+    # first, then hand the constructor that exact local path, so the
+    # revision pin is enforced, not just narrated.
+    checkpoint_path = resolve_checkpoint(args.instrument, args.revision)
+    checkpoint_resolved_revision = resolved_snapshot_revision(checkpoint_path)
+    checkpoint_sha256 = sha256_file(checkpoint_path)
+    print(
+        f"resolved checkpoint: {checkpoint_path.name} @ {checkpoint_resolved_revision} "
+        f"(requested={args.revision}; sha256={checkpoint_sha256[:16]}...)",
+        flush=True,
+    )
+
     t0 = time.time()
-    model = MidiTranscriptionModel(instrument=args.instrument, device=args.device)
+    model = MidiTranscriptionModel(
+        instrument=args.instrument, device=args.device, checkpoint_path=str(checkpoint_path)
+    )
     model_load_s = time.time() - t0
     print(f"model load: {model_load_s:.2f}s (device={model.device})", flush=True)
+
+    # Record the actually-resolved dependency versions, not just what this
+    # script's --revision default claims -- e.g. piano-transcription-inference
+    # is an unpinned git dependency of hf-midi-transcription's own
+    # pyproject.toml, so what's actually installed can only be known by
+    # asking the running interpreter, not by reading source.
+    try:
+        dependency_versions, dependency_vcs_revisions = dependency_metadata(
+            [
+                "hf-midi-transcription",
+                "piano-transcription-inference",
+                "torch",
+                "huggingface-hub",
+            ]
+        )
+    except Exception as e:  # pragma: no cover - diagnostic only
+        dependency_versions = {"error": str(e)}
+        dependency_vcs_revisions = {"error": str(e)}
 
     subset = json.loads((ROOT / "data" / "selected-subset.json").read_text())
     per_track = []
@@ -204,6 +322,13 @@ def main():
                 "audioDurationSec": audio_duration_sec,
                 "inferenceSec": inference_s,
                 "realTimeFactor": rtf,
+                # The first track processed by a freshly-constructed model
+                # pays for lazy backend/kernel warm-up (device dispatch
+                # setup, first-call JIT/graph tracing, etc.) that later
+                # tracks don't -- its RTF is not representative of
+                # steady-state throughput. Flagged explicitly here rather
+                # than silently averaged in without comment.
+                "isFirstInference": len(per_track) == 0,
                 "predictedNoteCount": len(pred_notes),
                 "groundTruthNoteCount": len(gt_notes),
                 "metrics": metrics,
@@ -221,7 +346,9 @@ def main():
         tmp_midi.unlink()
 
     measured = [r for r in per_track if r["status"] == "MEASURED"]
-    peak_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # bytes->KB on macOS
+    rss_metadata = peak_rss_metadata(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+    warmed = [r for r in measured if not r["isFirstInference"]]
 
     summary = (
         {
@@ -231,6 +358,12 @@ def main():
             "meanOnsetOffsetF1": sum(r["metrics"]["onsetAndOffset"]["f1"] for r in measured)
             / len(measured),
             "meanRealTimeFactor": sum(r["realTimeFactor"] for r in measured) / len(measured),
+            # First-track RTF is inflated by device/backend warm-up (see
+            # isFirstInference above); this excludes it so the "steady
+            # state" number is available without recomputing from perTrack.
+            "meanRealTimeFactorExcludingFirstInference": (
+                sum(r["realTimeFactor"] for r in warmed) / len(warmed) if warmed else None
+            ),
             "totalFalsePositives": sum(
                 r["metrics"]["onsetOnly"]["falsePositives"] for r in measured
             ),
@@ -245,11 +378,24 @@ def main():
     out = {
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "instrument": args.instrument,
-        "revision": args.revision,
+        "checkpointRepoId": CHECKPOINT_REPO_ID,
+        "checkpointRequestedRevision": args.revision,
+        "checkpointResolvedRevision": checkpoint_resolved_revision,
+        "checkpointFile": checkpoint_path.name,
+        "checkpointSnapshot": (
+            f"snapshots/{checkpoint_resolved_revision}/{checkpoint_path.name}"
+        ),
+        "checkpointSha256": checkpoint_sha256,
+        "dependencyVersions": dependency_versions,
+        "dependencyVcsRevisions": dependency_vcs_revisions,
+        "requirementsLock": {
+            "path": "python/requirements-lock.txt",
+            "sha256": sha256_file(REQUIREMENTS_LOCK),
+        },
         "device": str(model.device),
         "requestedDevice": args.device,
         "modelLoadSec": model_load_s,
-        "peakRssKb": peak_rss_kb,
+        **rss_metadata,
         "summary": summary,
         "perTrack": per_track,
     }

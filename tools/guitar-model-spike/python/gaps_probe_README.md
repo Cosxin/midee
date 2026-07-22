@@ -70,7 +70,7 @@ source .venv/bin/activate
 uv pip install "git+https://github.com/xavriley/hf_midi_transcription.git@96f6797881e9497cbfc8f8e5deccea9c1f2f7adc"
 ```
 
-Three real bugs found and fixed along the way (full detail in the docs
+Four real bugs found and fixed along the way (full detail in the docs
 report's Model 2 section):
 
 1. `pip install hf-midi-transcription` (the README's **recommended** path)
@@ -104,34 +104,45 @@ report's Model 2 section):
 `guitar-fl.pth` (both practical to run once bug #3/#4 above were worked
 around) and evaluates each against the same 12-track GuitarSet subset and
 `.jams` ground truth as the Basic Pitch harness, using the same onset/
-onset+offset F1 methodology. Each checkpoint was run twice: once with
-`--device cpu` forced (comparable to Basic Pitch's CPU-JS RTF), once with
-the package's auto-selected device (Apple Silicon **MPS** GPU on this
-machine). Results: `results/results.gaps-guitar_gaps.json` (MPS),
-`results/results.gaps-guitar_gaps-cpu.json` (CPU), and the `guitar_fl`
-equivalents. Every file records its actual `device` and `requestedDevice`.
-Headline numbers (see docs report for full per-track tables and
-discussion):
+onset+offset F1 methodology. The checkpoint for each run is resolved and
+downloaded via an explicit, revision-pinned `hf_hub_download()` call (not
+left to the model constructor's own unpinned resolution), and the
+resolved file's sha256 is recorded in the output JSON. Each checkpoint was
+run twice: once with `--device cpu` forced (comparable to Basic Pitch's
+CPU-JS RTF), once with the package's auto-selected device (Apple Silicon
+**MPS** GPU on this machine). Results: `results/results.gaps-guitar_gaps.json`
+(MPS), `results/results.gaps-guitar_gaps-cpu.json` (CPU), and the
+`guitar_fl` equivalents. Every file records its actual `device`,
+`requestedDevice`, `checkpointSha256`, and `dependencyVersions`. Headline
+numbers (see docs report for full per-track tables and discussion):
 
-| Checkpoint | Mean onset F1@50ms | Mean onset+offset F1 | Mean RTF (CPU) | Mean RTF (MPS) | Peak RSS (CPU) | Peak RSS (MPS) |
+| Checkpoint | Mean onset F1@50ms | Mean onset+offset F1 | Mean RTF (CPU, excl. warm-up) | Mean RTF (MPS, excl. warm-up) | Peak RSS (CPU) | Peak RSS (MPS) |
 | --- | --- | --- | --- | --- | --- | --- |
-| `guitar-gaps.pth` | 0.881 | 0.434 | 0.104 | 0.063 | ~7.68 GB | ~831 MB |
-| `guitar-fl.pth` | 0.903 | 0.674 | 0.136 | 0.062 | ~7.26 GB | ~987 MB |
+| `guitar-gaps.pth` | 0.881 | 0.434 | 0.135 | 0.059 | ~7.35 GB | ~1.0 GB |
+| `guitar-fl.pth` | 0.903 | 0.674 | 0.116 | 0.059 | ~7.60 GB | ~1.0 GB |
 
 F1/FP/FN are identical between CPU and MPS runs for a given checkpoint
 (device doesn't change model output) -- a useful correctness check. Both
 checkpoints beat Basic Pitch's onset F1 (0.750, CPU) on this subset;
 `guitar-fl.pth` also beats Basic Pitch's onset+offset F1 (0.543). Both
-models are documented as **monophonic-only** and show it in their error
-pattern (false negatives dominate on GuitarSet's chord-heavy `comp`
-tracks).
+checkpoints are documented by their authors as **optimized/trained/
+validated for monophonic performance**, and this spike's own error pattern
+(false negatives dominate on GuitarSet's chord-heavy `comp` tracks) is
+empirically consistent with that documented scope -- not proof the
+underlying 88-class CRNN architecturally cannot represent overlapping
+notes, just evidence about what these specific checkpoints were trained
+and validated to do well.
 
-**The CPU peak-RSS numbers (~7.3-7.7GB) are the standout finding**: roughly
-9x the same checkpoint's MPS footprint, and roughly 16-17x Basic Pitch's
+**The CPU peak-RSS numbers (~7.3-7.6GB) are the standout finding**: roughly
+7-8x the same checkpoint's MPS footprint, and roughly 16-17x Basic Pitch's
 ~452MB. That is a concrete, measured reason for caution about
 resource-constrained deployment targets, independent of the (perfectly
 good) CPU real-time factor -- see "What remains unresolved" below for why
-this still isn't a Pi verdict.
+this still isn't a Pi verdict. (First-track RTF is warm-up-inflated on
+both devices -- e.g. one CPU run measured 0.32 for the first track vs.
+0.06-0.09 for later ones -- so the table above uses each run's
+`meanRealTimeFactorExcludingFirstInference` rather than the plain mean;
+see `run_gaps_eval.py`'s `isFirstInference` flag.)
 
 **macOS `ru_maxrss` unit note:** Python's `resource.getrusage(...).ru_maxrss`
 is bytes on macOS/BSD but KB on Linux -- `run_gaps_eval.py` divides by
