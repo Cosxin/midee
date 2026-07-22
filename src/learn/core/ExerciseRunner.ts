@@ -49,6 +49,7 @@ export class ExerciseRunner {
   private readonly host: HTMLElement
   private readonly onClose: (reason: 'completed' | 'abandoned') => void
   private readonly nowMs: () => number
+  private launchGeneration = 0
 
   constructor(deps: ExerciseRunnerDeps) {
     this.services = deps.services
@@ -69,13 +70,15 @@ export class ExerciseRunner {
   }
 
   async launch(descriptor: ExerciseDescriptor): Promise<void> {
-    if (this.currentExercise) this.close('abandoned')
+    const generation = ++this.launchGeneration
+    if (this.currentExercise) this.closeCurrent('abandoned')
     let ex: Exercise | null = null
-    let mounted = false
+    let mountAttempted = false
+    let startAttempted = false
+    const session = new Session(this.nowMs)
     try {
       if (descriptor.preload) await descriptor.preload()
-      const session = new Session(this.nowMs)
-      this.session = session
+      if (generation !== this.launchGeneration) return
       const ctx: ExerciseContext = {
         descriptor,
         services: this.services,
@@ -84,17 +87,31 @@ export class ExerciseRunner {
         overlay: this.overlay,
         host: this.host,
         onClose: (reason) => this.onClose(reason),
-        log: this.buildLog(descriptor),
+        log: this.buildLog(descriptor, session),
         storage: this.buildStorage(descriptor),
       }
       ex = descriptor.factory(ctx)
+      mountAttempted = true
       await ex.mount(this.host)
-      mounted = true
+      if (generation !== this.launchGeneration) {
+        this.cleanupLocal(ex, true, true)
+        return
+      }
+      // Publish only after every awaited boundary has completed and this
+      // launch is still newest. Until here, session/exercise are local.
       this.currentExercise = ex
       this.currentDescriptor = descriptor
+      this.session = session
       session.start()
+      if (generation !== this.launchGeneration) return
+      startAttempted = true
       ex.start()
+      if (generation !== this.launchGeneration) return
       this.subscribe(ex)
+      if (generation !== this.launchGeneration) {
+        this.unsubscribe()
+        return
+      }
 
       trackEvent('exercise_started', {
         exercise_id: descriptor.id,
@@ -102,23 +119,23 @@ export class ExerciseRunner {
         difficulty: descriptor.difficulty,
       })
     } catch (err) {
-      this.unsubscribe()
-      if (mounted && ex) {
-        try {
-          ex.stop()
-        } catch {}
-        try {
-          ex.unmount()
-        } catch {}
+      if (ex) this.cleanupLocal(ex, startAttempted || mountAttempted, mountAttempted)
+      if (this.currentExercise === ex && generation === this.launchGeneration) {
+        this.unsubscribe()
+        this.currentExercise = null
+        this.currentDescriptor = null
+        this.session = null
       }
-      this.currentExercise = null
-      this.currentDescriptor = null
-      this.session = null
       throw err
     }
   }
 
   close(reason: 'completed' | 'abandoned' = 'completed'): ExerciseResult | null {
+    this.launchGeneration++
+    return this.closeCurrent(reason)
+  }
+
+  private closeCurrent(reason: 'completed' | 'abandoned'): ExerciseResult | null {
     const ex = this.currentExercise
     const desc = this.currentDescriptor
     const session = this.session
@@ -181,6 +198,19 @@ export class ExerciseRunner {
     return null
   }
 
+  private cleanupLocal(ex: Exercise, stop: boolean, unmount: boolean): void {
+    if (stop) {
+      try {
+        ex.stop()
+      } catch {}
+    }
+    if (unmount) {
+      try {
+        ex.unmount()
+      } catch {}
+    }
+  }
+
   // ── Internal helpers ────────────────────────────────────────────────────
 
   private subscribe(ex: Exercise): void {
@@ -210,8 +240,7 @@ export class ExerciseRunner {
     this.unsubs = []
   }
 
-  private buildLog(descriptor: ExerciseDescriptor): ExerciseLog {
-    const session = this.session!
+  private buildLog(descriptor: ExerciseDescriptor, session: Session): ExerciseLog {
     return {
       hit: (_pitch) => session.hit(),
       miss: (pitch, expected) => session.miss(pitch, expected),

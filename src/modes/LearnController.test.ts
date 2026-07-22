@@ -3,6 +3,7 @@ import type { MidiFile } from '../core/midi/types'
 import { LearnController } from './LearnController'
 
 const runnerLaunch = vi.hoisted(() => vi.fn(() => Promise.resolve()))
+const runnerClose = vi.hoisted(() => vi.fn(() => null))
 
 // LearnOverlay pulls in PixiJS (Container / Graphics) which needs a real
 // WebGL context — not available in jsdom. Mock the whole module so
@@ -29,9 +30,7 @@ vi.mock('../learn/core/ExerciseRunner', () => ({
       return null
     }
     launch = runnerLaunch
-    close() {
-      return null
-    }
+    close = runnerClose
   },
 }))
 
@@ -237,6 +236,16 @@ describe('LearnController visualization forcing', () => {
     expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
     ctrl.exit()
     expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+  })
+
+  it('exit invalidates runner work even when no exercise is active', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    await (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+    runnerClose.mockClear()
+    ctrl.exit()
+    expect(runnerClose).toHaveBeenCalledWith('abandoned')
   })
 
   it('clears a piano force when exercise launch rejects', async () => {

@@ -147,7 +147,9 @@ export class LearnController {
     this.launchGeneration++
     // Close any active exercise as abandoned — this is a mode-level swap,
     // not an explicit "I'm done" signal.
-    if (this.runner?.isActive) this.runner.close('abandoned')
+    // close() also invalidates an in-flight preload/mount even when no
+    // exercise has published yet.
+    this.runner?.close('abandoned')
     // Release any piano force this session left behind — restores whatever
     // the user's saved preference was without ever having written to it.
     this.applyVisualizationForce(null)
