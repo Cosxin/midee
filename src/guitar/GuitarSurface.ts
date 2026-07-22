@@ -378,10 +378,12 @@ export class GuitarSurface implements VisualizationSurface {
     this.wake()
   }
 
+  // Does NOT touch `body.canvas-hidden` — SurfaceRouter owns that class
+  // exclusively (it's the only thing that knows whether the *active* surface
+  // is hidden; this surface doesn't know if it's even the active one).
   setVisible(visible: boolean): void {
     this.app.stage.visible = visible
     this.app.canvas.style.visibility = visible ? '' : 'hidden'
-    document.body.classList.toggle('canvas-hidden', !visible)
     if (!visible) this.cleanupGestures()
     if (visible) this.renderStaticFrame(this.lastTime)
   }
@@ -457,7 +459,10 @@ export class GuitarSurface implements VisualizationSurface {
     this.liveStoreUnsub?.()
     this.loopStoreUnsub?.()
     this.clockUnsub?.()
-    document.body.classList.remove('canvas-hidden')
+    // Deliberately does NOT touch `body.canvas-hidden` — see setVisible().
+    // The old unconditional `classList.remove` here used to clobber the
+    // class if piano (the *other* surface) was legitimately hidden at the
+    // moment guitar was destroyed.
     for (const layer of this.layers) layer.unmount()
     this.layers = []
     this.app.destroy(false, { children: true })

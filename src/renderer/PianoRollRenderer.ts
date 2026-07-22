@@ -709,13 +709,14 @@ export class PianoRollRenderer implements VisualizationSurface {
 
   // Hide/show the entire stage. Skips per-frame draw work (stage.visible=false
   // short-circuits child rendering in Pixi) and hides the underlying canvas so
-  // nothing leaks through DOM layers above. The body class lets CSS hide
-  // canvas-coupled chrome (e.g. the keyboard-resizer drag seam) in lockstep.
-  // Layout is preserved.
+  // nothing leaks through DOM layers above. Layout is preserved.
+  //
+  // Does NOT touch `body.canvas-hidden` — SurfaceRouter owns that class
+  // exclusively (it's the only thing that knows whether the *active* surface
+  // is hidden; this renderer doesn't know if it's even the active one).
   setVisible(visible: boolean): void {
     this.app.stage.visible = visible
     this.app.canvas.style.visibility = visible ? '' : 'hidden'
-    document.body.classList.toggle('canvas-hidden', !visible)
     // Coming back from hidden (sheet-music exercise → roll), the ticker may
     // be idle-stopped with a stale backbuffer — present the current state.
     if (visible) this.presentFrame()

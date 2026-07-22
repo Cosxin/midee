@@ -83,15 +83,17 @@ function countNotes(midi: { tracks: ReadonlyArray<{ notes: ReadonlyArray<unknown
 
 export class App {
   private clock = new MasterClock()
-  // Two concrete surfaces, each on its own canvas (see index.html), both
-  // initialized at boot so switching visualization is instant. `surfaces`
-  // (a `SurfaceRouter`) is what `AppServices.renderer` actually resolves to —
-  // piano-specific chrome (particles, keyboard resize, track visibility,
+  // Piano is a concrete surface on its own canvas (see index.html),
+  // initialized eagerly at boot. Guitar is constructed lazily — the first
+  // time `SurfaceRouter` actually needs it — via `createGuitarSurface()` so a
+  // piano-only session never pays for a second Pixi/WebGL context. `surfaces`
+  // (the `SurfaceRouter`) is what `AppServices.renderer` actually resolves to
+  // — piano-specific chrome (particles, keyboard resize, track visibility,
   // mouse-to-pitch, export pitch-fit/zoom) stays pinned to `pianoRenderer`
   // directly since it has no guitar equivalent.
   private pianoRenderer = new PianoRollRenderer()
-  private guitarSurface = new GuitarSurface()
-  private surfaces = new SurfaceRouter(this.pianoRenderer, this.guitarSurface)
+  private guitarCanvas!: HTMLCanvasElement
+  private surfaces = new SurfaceRouter(this.pianoRenderer, () => this.createGuitarSurface())
   private synth = new SynthEngine()
   private inputBus = new InputBus()
   midiInput!: MidiInputManager
@@ -209,11 +211,10 @@ export class App {
     installViewportClassSync()
 
     await this.pianoRenderer.init(canvas)
-    await this.guitarSurface.init(guitarCanvas)
-    // Guitar starts hidden — the router's active surface is 'piano' until a
-    // switch happens, and it never manages the *inactive* surface's own
-    // visibility (only whichever is active at the time).
-    this.guitarSurface.setVisible(false)
+    // Guitar's canvas element exists in the DOM from boot, but the
+    // GuitarSurface/Pixi context behind it is constructed lazily — see
+    // `createGuitarSurface()`.
+    this.guitarCanvas = guitarCanvas
     this.surfaces.attachClock(this.clock)
     this.surfaces.setLiveNoteStore(this.liveNotes)
     this.surfaces.setLoopNoteStore(this.loopNotes)
@@ -283,7 +284,7 @@ export class App {
         // rendering held live notes (e.g. the guitar fretboard) can tell
         // apart overlapping voices instead of collapsing them by pitch.
         (evt) => {
-          this.synth.liveNoteOn(evt.pitch, evt.velocity)
+          this.synth.liveNoteOn(evt.pitch, evt.velocity, evt.voiceId)
           this.liveNotes.press(evt.pitch, evt.velocity, evt.clockTime, {
             ...(evt.sourceId !== undefined ? { sourceId: evt.sourceId } : {}),
             ...(evt.channel !== undefined ? { channel: evt.channel } : {}),
@@ -291,7 +292,7 @@ export class App {
           })
         },
         (evt) => {
-          this.synth.liveNoteOff(evt.pitch)
+          this.synth.liveNoteOff(evt.pitch, evt.voiceId)
         },
       ),
       // Capture-mode note-off subscriber: looper + session recorder capture
@@ -422,7 +423,8 @@ export class App {
 
     this.trackPanel = new TrackPanel(
       overlay,
-      this.pianoRenderer,
+      this.pianoRenderer.currentTheme,
+      (id, visible) => this.pianoRenderer.setTrackVisible(id, visible),
       (id, enabled) => {
         this.synth.setTrackEnabled(id, enabled)
         trackEvent('track_toggled', { enabled })
@@ -627,10 +629,13 @@ export class App {
       }),
       // Fretboard taps/clicks on the guitar surface — only fires while its
       // canvas is visible and receiving pointer/keyboard events (see
-      // `FretboardInteraction`). Re-publishes onto the same InputBus as MIDI
-      // and computer-keyboard input so audio, live state, capture, and reset
-      // all see one fan-out point regardless of source.
-      this.guitarSurface.surfaceHits.subscribe((hit) => {
+      // `FretboardInteraction`). Subscribed once on the router's stable
+      // `surfaceHits` signal (not the concrete, lazily-constructed
+      // GuitarSurface) so this keeps working across guitar being torn down
+      // and rebuilt and across mode switches. Re-publishes onto the same
+      // InputBus as MIDI and computer-keyboard input so audio, live state,
+      // capture, and reset all see one fan-out point regardless of source.
+      this.surfaces.surfaceHits.subscribe((hit) => {
         if (!hit) return
         const evt = {
           pitch: hit.pitch,
@@ -710,10 +715,50 @@ export class App {
 
   // Switches which concrete surface is on screen. Never touches the
   // selected output instrument (synth) — visualization and audio are
-  // orthogonal by design (see docs on VisualizationSurface).
+  // orthogonal by design (see docs on VisualizationSurface). Fire-and-forget:
+  // the watch() call site is synchronous, and SurfaceRouter.setMode already
+  // resolves latest-request-wins internally, so a rapid run of calls here is
+  // safe to leave un-awaited — each just races to update the same router.
   private applyVisualizationMode(mode: VisualizationMode): void {
-    this.surfaces.setMode(mode, this.clock.currentTime)
-    document.body.classList.toggle('visualization-guitar', mode === 'guitar')
+    void this.switchVisualizationSurface(mode)
+  }
+
+  private async switchVisualizationSurface(mode: VisualizationMode): Promise<void> {
+    try {
+      await this.surfaces.setMode(mode, this.clock.currentTime)
+    } catch (err) {
+      // Guitar's first-ever init failed (e.g. WebGL unavailable). Never leave
+      // this as an unhandled rejection, and never flip `visualization-guitar`
+      // body state for a switch that didn't actually happen.
+      console.error('Failed to switch visualization surface:', err)
+      // Only roll back when the failure came from the user's own saved
+      // preference — a Learn-mode force has no preference to roll back, and
+      // clobbering it here would fight Learn's own state ownership.
+      if (
+        this.store.state.visualizationForced === null &&
+        this.store.state.visualizationMode === 'guitar'
+      ) {
+        this.store.setVisualizationMode('piano')
+      }
+      return
+    }
+    // Derive from the router's actual resulting mode rather than the `mode`
+    // this call requested — a stale call that lost a latest-wins race
+    // resolves without throwing (SurfaceRouter no-ops it), and body state
+    // must track whichever switch really landed.
+    document.body.classList.toggle('visualization-guitar', this.surfaces.currentMode === 'guitar')
+  }
+
+  // Lazy factory passed to `SurfaceRouter` — constructs and initializes the
+  // guitar Pixi/WebGL context only the first time it's actually needed, so a
+  // piano-only session never pays for a second canvas context. `SurfaceRouter`
+  // caches the resulting surface (and, on failure, retries from scratch on
+  // the next switch attempt — see `ensureGuitar()`), so this runs at most
+  // once per successful construction.
+  private async createGuitarSurface(): Promise<GuitarSurface> {
+    const surface = new GuitarSurface()
+    await surface.init(this.guitarCanvas)
+    return surface
   }
 
   // Topbar selector callback — persists the user's choice. Application to
@@ -1060,22 +1105,32 @@ export class App {
     // render. Stop it for the duration; restored in the finally below.
     const metronomeWasRunning = this.metronome.running.value
     this.metronome.stop()
-    // Only the active surface needs to stop ticking for capture — the other
-    // one is already paused+hidden from becoming inactive (see SurfaceRouter).
-    this.surfaces.pauseAutoRender()
 
     const needsVideo = settings.output !== 'audio-only'
     const needsAudio = settings.output !== 'video-only'
-    const exportingPiano = this.surfaces.currentMode === 'piano'
+
+    // WAV/MP3 render entirely offline and never touch a visualization surface
+    // — no lease, no pause/resize. Video capture pins exactly one surface for
+    // the whole export via a lease so a visualization switch requested
+    // mid-export can't swap the canvas out from under the encoder; any switch
+    // attempted while the lease is held is deferred by SurfaceRouter and
+    // replayed (latest request wins) once we release() below.
+    const lease = needsVideo ? this.surfaces.acquireCaptureLease() : null
+    // Only the leased surface needs to stop ticking for capture — the other
+    // one is already paused+hidden from being inactive (see SurfaceRouter).
+    lease?.surface.pauseAutoRender()
+    const exportingPiano = lease !== null && lease.surface === this.pianoRenderer
 
     // Only resize the canvas when we're actually rendering video.
-    const originalCanvas = this.surfaces.canvasSize
+    const originalCanvas = lease?.surface.canvasSize ?? null
     const target = needsVideo ? resolveExportDims(settings.resolution) : null
     const resized =
+      lease !== null &&
       target !== null &&
+      originalCanvas !== null &&
       (target.width !== originalCanvas.width || target.height !== originalCanvas.height)
-    if (resized) {
-      this.surfaces.resize(target.width, target.height, 1)
+    if (resized && lease) {
+      lease.surface.resize(target.width, target.height, 1)
     }
 
     // Snapshot viewport state so we can restore after export. Vertical/Square
@@ -1171,8 +1226,12 @@ export class App {
       }
 
       exportStage = 'video_encode'
+      // needsVideo is true on every path that reaches here (audio-only
+      // returned above), so the lease was always acquired — this guard is
+      // just for narrowing.
+      if (!lease) throw new Error('video export requires a capture lease')
       const { VideoExporter } = await import('./export/VideoExporter')
-      const exporter = new VideoExporter(this.surfaces.canvas)
+      const exporter = new VideoExporter(lease.surface.canvas)
       this.currentExporter = exporter
 
       const exportAudio =
@@ -1188,7 +1247,7 @@ export class App {
         bitrate: resolveExportBitrate(settings.resolution),
         ...(exportAudio ? { audio: exportAudio } : {}),
         onSeek: (t) => this.clock.seek(t),
-        onRenderFrame: (t, dt) => this.surfaces.renderManualFrame(t, dt),
+        onRenderFrame: (t, dt) => lease.surface.renderManualFrame(t, dt),
         onProgress: (stage, pct) => exportModal.updateProgress(stage, pct),
       })
       exportModal.close()
@@ -1211,14 +1270,18 @@ export class App {
       exportModal.close()
     } finally {
       this.currentExporter = null
-      if (resized) {
+      if (resized && lease && originalCanvas) {
         // Match window dimensions instead of the stale originalCanvas values
         // in case the window was resized while we were exporting.
-        this.surfaces.resize(window.innerWidth, window.innerHeight, originalCanvas.resolution)
+        lease.surface.resize(window.innerWidth, window.innerHeight, originalCanvas.resolution)
       }
       if (pitchChanged) this.pianoRenderer.setPitchRange(originalRange.min, originalRange.max)
       if (ppsChanged) this.pianoRenderer.setZoom(originalPps)
-      this.surfaces.resumeAutoRender()
+      lease?.surface.resumeAutoRender()
+      // Release only after size/render state is fully restored — this is
+      // what lets a visualization switch deferred during capture (see
+      // SurfaceRouter.acquireCaptureLease) safely replay.
+      lease?.release()
       this.clock.seek(resumeAt)
       if (metronomeWasRunning) this.metronome.start()
       this.store.setState('status', 'ready')
