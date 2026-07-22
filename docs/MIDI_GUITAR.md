@@ -27,7 +27,7 @@ Midee uses a standard 6-string, 24-fret profile:
   - String 4 (D): D3 (MIDI pitch 50)
   - String 5 (A): A2 (MIDI pitch 45)
   - String 6 (Low E): E2 (MIDI pitch 40)
-- **Fret Range:** Frets 0 through 24 (spanning pitches E2 / MIDI 40 to E6 / MIDI 88).
+- **Fret Range:** Frets 0 through 24 (spanning pitches E2 / MIDI 40 to E6 / MIDI 88 inclusive).
 - **Tablature & Highway Geometry:**
   - On the horizontal fretboard surface, String 1 (High E) is displayed at the top and String 6 (Low E) at the bottom, matching standard tablature conventions.
   - On the note highway, lanes map left-to-right from low E (String 6) to high E (String 1).
@@ -38,14 +38,16 @@ Midee uses a standard 6-string, 24-fret profile:
 
 1. **Play Mode:**
    - Decodes loaded MIDI files and schedules note events onto the 6-string fretboard and highway lanes in real time.
-2. **Live Performance:**
-   - Accepts Web MIDI controller inputs, computer keyboard notes, or live event streams and calculates live fretboard note assignments with minimal latency (`LiveGuitarFingering`).
+2. **Live Performance (`assignLiveGuitarVoices`):**
+   - Incoming live performance notes are processed by `assignLiveGuitarVoices` (in `GuitarSurface.ts`).
+   - Direct user touch/mouse interactions on the fretboard canvas (via `FretboardInteraction`) explicitly specify and preserve the targeted string and fret (`position: { string, fret }`), bypassing fingering inference.
+   - External live MIDI notes (from keyboards or MIDI controllers lacking pre-assigned string/fret data) are dynamically assigned via cluster fingering inference (`LiveGuitarFingering` / `assignGuitarCluster`), reserving strings already claimed by direct fretboard interactions.
 3. **Play-Along Exercises:**
    - Integrates with Midee's interactive practice engine for step-by-step guitar play-along verification.
 4. **Track Visibility & Filtering:**
    - Multi-track MIDI control allows toggling visibility per channel/track, determining which tracks render on the guitar surface.
 5. **Touch & Mobile Ergonomics:**
-   - Fretboard layout enforces minimum touch target dimensions (`MIN_FRET_TARGET_PX = 44`) for high touch accuracy on mobile screens.
+   - Fretboard layout enforces string heights and touch target dimensions of at least 44 px (`MIN_FRET_TARGET_PX = 44`) for high touch accuracy on mobile screens.
    - Includes horizontal fretboard panning/scrolling so full 24-fret positions are accessible on smaller viewports.
 6. **Active-Surface MP4 Export:**
    - WebCodecs video export (`VideoExporter`) renders whichever surface is currently active. Exporting video while Guitar mode is selected produces an MP4 video of the 6-string fretboard visualization.
@@ -55,26 +57,27 @@ Midee uses a standard 6-string, 24-fret profile:
 ## Fingering Inference & Channel Affinity
 
 ### Algorithmic Dynamic Fingering
-Fret positions are dynamically computed via dynamic programming / heuristic scoring (`assignGuitarCluster`):
-- **Span Constraint:** Prefers positions within a 4-fret hand span ($\le 4$ frets).
-- **Hand Movement:** Minimizes fret jumping between consecutive note clusters.
+Fret positions for external MIDI inputs are dynamically computed via dynamic programming / heuristic scoring (`assignGuitarCluster`):
+- **Span Preference:** Evaluates positions with a preference for a 4-fret hand span ($\le 4$ frets incur no penalty; wider spans incur a score penalty).
+- **Prior-Position Movement Scoring:** Computes a movement distance penalty against previously active positions (`movement += Math.abs(position.fret - previous.fret)`), favoring fingerings that minimize hand jumping across consecutive time clusters.
 - **Polyphony:** Enforces a maximum of one note per physical string per time cluster (40 ms window).
 - **Low Fret Preference:** Favors open strings and lower fret positions when multiple playable options exist.
 
-### MIDI Channel & Voice Affinity Semantics
-- Notes sharing a MIDI channel maintain string affinity (`affinityByChannel`).
-- Consecutive notes on the same MIDI channel prefer staying on the same physical string, preserving melodic continuity for multi-channel MIDI files and mapped channel inputs.
+### Soft MIDI Channel & Voice Affinity Semantics
+- Candidate position scoring tracks channel affinity (`affinityByChannel`).
+- Matching a voice's MIDI channel to a previously used string provides a soft scoring bonus (`-affinityMatches` in the score vector), encouraging consecutive notes on the same MIDI channel to stay on the same physical string without hard-locking channel assignments.
 
-### Ergonomic Inferred Fingering Disclaimer
-- **Inferred, Not Tablature:** Fret assignments are algorithmically inferred for physical playability and visual clarity. They do **not** represent or attempt to reconstruct exact performed tablature or original performer string selections from performance MIDI.
+### Direct Interaction vs. Inferred Fingering
+- **Direct Interaction:** Clicking or touching specific fretboard coordinates explicitly sets the string and fret, preserving the exact performed position.
+- **External MIDI Fingering:** Fret assignments for external MIDI files or live MIDI controllers without string metadata are algorithmically inferred for ergonomics and visual clarity. They do **not** represent or attempt to reconstruct exact performed tablature or original performer finger placements.
 
 ---
 
 ## Handling of Unsupported Voices & Out-of-Range Notes
 
-- **Pitch Range Bounds:** Standard EADGBE 24-fret range covers MIDI pitches 40 (E2) through 88 (E6).
+- **Pitch Range Bounds:** Standard EADGBE 24-fret range covers MIDI pitches 40 (E2) through 88 (E6) inclusive.
 - **Behavior for Out-of-Range or Exceeded Polyphony Notes:**
-  - **Audible:** Out-of-range notes (pitch < 40 or pitch > 88) and notes exceeding 6-string polyphony remain **100% audible** through the audio synthesizer.
+  - **Audio Engine Path:** Out-of-range notes (pitch < 40 or pitch > 88) and notes exceeding 6-string polyphony continue to play through Midee's normal audio and synthesizer path (`SynthEngine`).
   - **Visible:** Out-of-range/exceeded notes remain visible on the UI and note highway.
   - **Play-Along Verification:** Marked as unassigned/unsupported (`supported: false`, `position: null`). They are **not required** for Guitar Play-Along exercise step matching or progress validation.
 
@@ -91,10 +94,10 @@ Fret positions are dynamically computed via dynamic programming / heuristic scor
 
 The following capabilities are **explicitly excluded** from v1:
 
-1. **Microphone / Raspberry Pi Guitar Transcription:** Audio-to-MIDI live transcription on the Pi harness prototype is piano-only. No audio-to-MIDI guitar transcription is active or supported in v1.
+1. **Microphone & Raspberry Pi Guitar Transcription:** Microphone and Raspberry Pi guitar audio-to-MIDI transcription is absent in v1 (the separate Raspberry Pi verification harness `?pi=1` is strictly piano-oriented for 88-key piano LED strip verification).
 2. **Alternate Tunings:** Tuning is strictly standard EADGBE (no Drop D, DADGAD, Open G, or custom tunings).
 3. **Continuous Pitch Bends & MPE:** Pitch bend wheel modulation and MIDI Polyphonic Expression (MPE) pitch curves are excluded in v1.
-4. **Exact Performed Tablature:** Fret positions are algorithmically inferred and do not capture original performer finger placement.
+4. **Exact Performed Tablature:** Fret positions for external MIDI are algorithmically inferred for ergonomics rather than extracted from exact performer tablature.
 
 ---
 

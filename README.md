@@ -224,12 +224,12 @@ capabilities.
 Midee supports 6-string guitar fretboard visualization alongside the 88-key piano surface:
 
 - **Timbre Independence:** The active visualization surface (Piano vs Guitar) is independent of output audio timbre settings.
-- **Fretboard Geometry:** Standard EADGBE 24-fret profile (E2/MIDI 40 to E6/MIDI 88).
-- **Supported Workflows:** MIDI file Play mode, Live MIDI controller input, Play-Along exercises, multi-track visibility toggles, touch/mobile layouts with $\ge 44\text{px}$ touch targets and horizontal panning, and active-surface WebCodecs MP4 video export.
-- **Dynamic Ergonomic Fingering:** Dynamic programming cluster assignment optimizes hand span ($\le 4$ frets) and fret distance while preserving MIDI channel/voice string affinity. Inferred fingering provides playable guidance and is not exact performed tablature.
-- **Unsupported Voices:** Out-of-range notes or polyphony > 6 remain audible and visible but are marked unassigned and are not required for Guitar Play-Along verification.
+- **Fretboard Geometry:** Standard EADGBE 24-fret profile (MIDI 40 [E2] to MIDI 88 [E6] inclusive).
+- **Supported Workflows:** MIDI file Play mode, live performance via `assignLiveGuitarVoices`, Play-Along exercises, multi-track visibility toggles, touch/mobile layouts with at least 44 px touch target bounds and horizontal panning, and active-surface WebCodecs MP4 video export.
+- **Dynamic Ergonomic Fingering & Direct Interaction:** Direct canvas interactions preserve specified string/fret positions. External MIDI input undergoes cluster fingering inference with a soft 4-fret span preference, prior-position movement penalties, and soft MIDI channel-to-string affinity. Inferred fingering provides playable guidance and is not exact performed tablature.
+- **Unsupported Voices:** Out-of-range notes (<40 or >88) or polyphony > 6 play through Midee's normal audio and synthesizer path and remain visible, but are marked unassigned and are not required for Guitar Play-Along verification.
 - **Learn Exercises:** Piano-only Learn exercises temporarily force piano visualization (`visualizationForced = 'piano'`), restoring saved user preferences when exited.
-- **Explicit v1 Exclusions:** Microphone/Pi audio transcription, alternate tunings, pitch bends/MPE, and exact performed tablature.
+- **Explicit v1 Exclusions:** Microphone/Pi guitar audio transcription is absent (the separate Pi verification harness is piano-oriented), alternate tunings, pitch bends/MPE, and exact performed tablature.
 
 For complete documentation, see [`docs/MIDI_GUITAR.md`](docs/MIDI_GUITAR.md). Separate ML research on audio transcription models is documented in [`docs/GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md`](docs/GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md) (not adopted in v1).
 
