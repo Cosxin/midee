@@ -13,10 +13,11 @@ for developing an 88-key piano-learning LED strip.
 ## Features
 
 - 88-key piano visualization with multi-track playback and live note glow.
+- 6-string 24-fret guitar fretboard visualization (standard EADGBE profile) with dynamic ergonomic fingering and channel affinity.
 - Web MIDI, sustain pedal, and computer-keyboard input.
 - Sampled instruments, looping, session recording, and MIDI export.
-- Synthesia-style practice modes.
-- Local MP4 rendering through WebCodecs.
+- Synthesia-style practice modes and interactive Play-Along exercises.
+- Local active-surface MP4 video rendering through WebCodecs.
 - Raspberry Pi LED harness with WebSocket streaming and transport controls.
 - MIDI velocity propagation from the Pi into Midee's normal input,
   visualization, and synthesizer path.
@@ -217,6 +218,20 @@ This is future work, not a currently supported setup. Feasibility will depend
 on the host operating system's ability to expose received Bluetooth audio as a
 capturable stream; Linux, Windows, and macOS provide different A2DP sink
 capabilities.
+
+## MIDI Guitar visualization
+
+Midee supports 6-string guitar fretboard visualization alongside the 88-key piano surface:
+
+- **Timbre Independence:** The active visualization surface (Piano vs Guitar) is independent of output audio timbre settings.
+- **Fretboard Geometry:** Standard EADGBE 24-fret profile (E2/MIDI 40 to E6/MIDI 88).
+- **Supported Workflows:** MIDI file Play mode, Live MIDI controller input, Play-Along exercises, multi-track visibility toggles, touch/mobile layouts with $\ge 44\text{px}$ touch targets and horizontal panning, and active-surface WebCodecs MP4 video export.
+- **Dynamic Ergonomic Fingering:** Dynamic programming cluster assignment optimizes hand span ($\le 4$ frets) and fret distance while preserving MIDI channel/voice string affinity. Inferred fingering provides playable guidance and is not exact performed tablature.
+- **Unsupported Voices:** Out-of-range notes or polyphony > 6 remain audible and visible but are marked unassigned and are not required for Guitar Play-Along verification.
+- **Learn Exercises:** Piano-only Learn exercises temporarily force piano visualization (`visualizationForced = 'piano'`), restoring saved user preferences when exited.
+- **Explicit v1 Exclusions:** Microphone/Pi audio transcription, alternate tunings, pitch bends/MPE, and exact performed tablature.
+
+For complete documentation, see [`docs/MIDI_GUITAR.md`](docs/MIDI_GUITAR.md). Separate ML research on audio transcription models is documented in [`docs/GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md`](docs/GUITAR_TRANSCRIPTION_MODEL_EVALUATION.md) (not adopted in v1).
 
 ## Main architecture
 
