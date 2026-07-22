@@ -36,12 +36,14 @@ Midee uses a standard 6-string, 24-fret profile:
 
 ## Supported Modes & Workflows
 
-1. **Play Mode:**
-   - Decodes loaded MIDI files and schedules note events onto the 6-string fretboard and highway lanes in real time.
+1. **Play Mode (Scheduled MIDI):**
+   - Decodes loaded MIDI files using `precomputeGuitarFingerings` (in `src/guitar/fingering.ts`).
+   - Groups note events into 40 ms time clusters, evaluating movement distance penalties against immediately preceding cluster positions (at matching cluster-array indices) and soft MIDI channel affinity across time clusters to schedule 6-string fretboard and highway note events.
 2. **Live Performance (`assignLiveGuitarVoices`):**
-   - Incoming live performance notes are processed by `assignLiveGuitarVoices` (in `GuitarSurface.ts`).
-   - Direct user touch/mouse interactions on the fretboard canvas (via `FretboardInteraction`) explicitly specify and preserve the targeted string and fret (`position: { string, fret }`), bypassing fingering inference.
-   - External live MIDI notes (from keyboards or MIDI controllers lacking pre-assigned string/fret data) are dynamically assigned via cluster fingering inference (`LiveGuitarFingering` / `assignGuitarCluster`), reserving strings already claimed by direct fretboard interactions.
+   - Active live performance notes are assigned frame-by-frame via `assignLiveGuitarVoices` (in `GuitarSurface.ts`).
+   - Direct user touch/mouse interactions on the fretboard canvas (via `FretboardInteraction`) explicitly specify and preserve targeted string and fret positions (`position: { string, fret }`), reserving those physical strings.
+   - For remaining currently held live MIDI notes without explicit string assignments, it calls `assignGuitarCluster` with an empty state (`EMPTY_STATE`).
+   - The production live path does **not** carry prior-cluster movement scoring or channel affinity across live renders.
 3. **Play-Along Exercises:**
    - Integrates with Midee's interactive practice engine for step-by-step guitar play-along verification.
 4. **Track Visibility & Filtering:**
@@ -54,18 +56,22 @@ Midee uses a standard 6-string, 24-fret profile:
 
 ---
 
-## Fingering Inference & Channel Affinity
+## Fingering Inference & MIDI Channel Affinity
 
-### Algorithmic Dynamic Fingering
-Fret positions for external MIDI inputs are dynamically computed via dynamic programming / heuristic scoring (`assignGuitarCluster`):
+Fret positions for external MIDI inputs are dynamically computed via dynamic programming / heuristic scoring (`assignGuitarCluster`), with distinct semantics between precomputed scheduled MIDI playback and real-time live input:
+
+### Scheduled MIDI Precomputation (`precomputeGuitarFingerings`)
+Loaded MIDI files undergo batch precomputation via `precomputeGuitarFingerings`:
+- **40 ms Cluster Windowing:** Groups note events into 40 ms time windows (`GUITAR_CLUSTER_WINDOW_MS = 40`).
+- **Prior-Position Movement Scoring:** Computes a movement distance penalty against immediately preceding cluster positions at the same cluster-array index (`movement += Math.abs(position.fret - previous.fret)`). Movement scoring evaluates only the immediately prior cluster order, without persisting movement history beyond that prior cluster.
+- **Soft MIDI Channel Affinity:** Tracks channel affinity (`affinityByChannel`). Matching a voice's MIDI channel to a previously used string provides a soft scoring bonus (`-affinityMatches` in the score vector), encouraging consecutive notes on the same MIDI channel to stay on the same physical string without hard-locking channel assignments.
 - **Span Preference:** Evaluates positions with a preference for a 4-fret hand span ($\le 4$ frets incur no penalty; wider spans incur a score penalty).
-- **Prior-Position Movement Scoring:** Computes a movement distance penalty against previously active positions (`movement += Math.abs(position.fret - previous.fret)`), favoring fingerings that minimize hand jumping across consecutive time clusters.
-- **Polyphony:** Enforces a maximum of one note per physical string per time cluster (40 ms window).
-- **Low Fret Preference:** Favors open strings and lower fret positions when multiple playable options exist.
+- **Polyphony & Low Frets:** Enforces at most one note per physical string per time cluster and favors open strings / lower fret positions.
 
-### Soft MIDI Channel & Voice Affinity Semantics
-- Candidate position scoring tracks channel affinity (`affinityByChannel`).
-- Matching a voice's MIDI channel to a previously used string provides a soft scoring bonus (`-affinityMatches` in the score vector), encouraging consecutive notes on the same MIDI channel to stay on the same physical string without hard-locking channel assignments.
+### Real-Time Live Input Assignment (`assignLiveGuitarVoices`)
+Live performance notes are assigned per render frame via `assignLiveGuitarVoices`:
+- **Direct Interaction Preservation:** Direct touch/mouse clicks on the fretboard canvas explicitly set string and fret (`position: { string, fret }`), reserving those physical strings.
+- **Stateless Frame Assignment:** Unassigned live notes are passed to `assignGuitarCluster` with an empty state (`EMPTY_STATE`). The production live path does not carry prior-cluster movement history or channel affinity state across live renders.
 
 ### Direct Interaction vs. Inferred Fingering
 - **Direct Interaction:** Clicking or touching specific fretboard coordinates explicitly sets the string and fret, preserving the exact performed position.
