@@ -188,7 +188,11 @@ The prototype currently uses:
 - BlueZ configured as an A2DP audio sink
 - PipeWire and WirePlumber
 - A persistent headless Bluetooth pairing agent
-- An Onsets & Velocities piano-transcription model
+- The [ONSETS&VELOCITIES](https://arxiv.org/abs/2303.04485)
+  piano-transcription model by Andrés Fernández, introduced in *Onsets and
+  Velocities: Affordable Real-Time Piano Transcription Using Convolutional
+  Neural Networks* (EUSIPCO 2023), using the authors'
+  [open-source implementation](https://github.com/andres-fr/iamusica_training)
 - A 1.0-second inference look-ahead
 - A 750 ms minimum displayed key-down time
 - AVRCP-backed start, pause, resume, and stop commands
