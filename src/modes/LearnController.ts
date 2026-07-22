@@ -238,7 +238,11 @@ export class LearnController {
   private async consumeMidi(midi: MidiFile): Promise<void> {
     // A newly selected piece is a fresh practice session. Do not inherit the
     // previous exercise's playhead, hand focus, loop, or wait state.
-    if (this.runner?.isActive) this.runner.close('abandoned')
+    // Invalidate controller- and runner-level pending launch work before the
+    // fresh launch starts. A runner stays inactive while preload/mount is in
+    // flight, so checking `isActive` here would let that stale work survive.
+    this.launchGeneration++
+    this.runner?.close('abandoned')
     this.ctx.services.clock.pause()
     this.ctx.services.clock.seek(0)
     this.ctx.services.synth.pause()
@@ -299,14 +303,17 @@ export class LearnController {
 
   // Called by the runner's `onClose` (triggered from an exercise via
   // `ctx.onClose`) or by external callers (hub back button). Idempotent —
-  // returning with no active runner is a harmless no-op.
+  // returning with no runner is a harmless no-op. An inactive runner may
+  // still have preload/mount work pending, so it must also be closed.
   closeActiveExercise(reason: 'completed' | 'abandoned' = 'abandoned'): void {
-    if (!this.runner?.isActive) return
-    const lastDescriptor = this.runner.activeId
+    const runner = this.runner
+    if (!runner) return
+    this.launchGeneration++
+    const lastDescriptor = runner.activeId
     const lastMidi = this.learnState.state.loadedMidi
     const xpBefore = this.progress.xp
     const streakBefore = this.progress.streakDays
-    const result = this.runner.close(reason)
+    const result = runner.close(reason)
     this.applyVisualizationForce(null)
     this.showHubView()
     this.clearLoadedLearnMidi()

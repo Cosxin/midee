@@ -4,6 +4,9 @@ import { LearnController } from './LearnController'
 
 const runnerLaunch = vi.hoisted(() => vi.fn(() => Promise.resolve()))
 const runnerClose = vi.hoisted(() => vi.fn(() => null))
+const createSessionSummaryMock = vi.hoisted(() =>
+  vi.fn(() => ({ show: vi.fn(), dismiss: vi.fn() })),
+)
 
 // LearnOverlay pulls in PixiJS (Container / Graphics) which needs a real
 // WebGL context — not available in jsdom. Mock the whole module so
@@ -44,7 +47,7 @@ vi.mock('../learn/hub/LearnHub', () => ({
 // SessionSummary renders HTML into the hub host after an exercise closes.
 // Not exercised by these tests; mocking prevents stray DOM side-effects.
 vi.mock('../learn/ui/SessionSummary', () => ({
-  createSessionSummary: () => ({ show: () => {}, dismiss: () => {} }),
+  createSessionSummary: createSessionSummaryMock,
 }))
 
 vi.mock('../telemetry', () => ({
@@ -202,6 +205,7 @@ describe('LearnController.queueMidi', () => {
 // tests the forcing/restoration policy directly, independent of hub wiring.
 interface LaunchExerciseAccess {
   launchExercise(descriptor: { id: string; category: string }): Promise<void>
+  consumeMidi(midi: MidiFile): Promise<void>
 }
 
 describe('LearnController visualization forcing', () => {
@@ -280,5 +284,72 @@ describe('LearnController visualization forcing', () => {
     rejectFirst(new Error('stale preload failed'))
     await first
     expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith('piano')
+  })
+
+  it.each([
+    'resolve',
+    'reject',
+  ] as const)('closes an inactive pending launch and ignores its later %s', async (settlement) => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    ctrl.learnState.completeLoad(makeMidi('pending.mid'))
+    let resolveLaunch!: () => void
+    let rejectLaunch!: (reason: unknown) => void
+    runnerLaunch.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          resolveLaunch = resolve
+          rejectLaunch = reject
+        }),
+    )
+    const launch = (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+
+    runnerClose.mockClear()
+    createSessionSummaryMock.mockClear()
+    ctrl.closeActiveExercise('abandoned')
+
+    expect(runnerClose).toHaveBeenCalledWith('abandoned')
+    expect(createSessionSummaryMock).not.toHaveBeenCalled()
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+    expect(ctrl.view.value).toBe('hub')
+    expect(ctrl.learnState.state.loadedMidi).toBeNull()
+    expect(ctx.setLearnFileName).toHaveBeenLastCalledWith(null)
+
+    if (settlement === 'resolve') resolveLaunch()
+    else rejectLaunch(new Error('cancelled preload failed'))
+    await launch
+
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+    expect(ctrl.view.value).toBe('hub')
+    expect(ctrl.learnState.state.loadedMidi).toBeNull()
+  })
+
+  it('cancels a pending launch before consuming a fresh MIDI', async () => {
+    const ctx = makeFakeCtx()
+    const ctrl = new LearnController(ctx as never)
+    ctrl.enter()
+    let rejectOld!: (reason: unknown) => void
+    runnerLaunch
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectOld = reject
+          }),
+      )
+      .mockResolvedValueOnce(undefined)
+    const oldLaunch = (ctrl as unknown as LaunchExerciseAccess).launchExercise(sightReading)
+
+    runnerClose.mockClear()
+    await (ctrl as unknown as LaunchExerciseAccess).consumeMidi(makeMidi('fresh.mid'))
+    expect(runnerClose).toHaveBeenCalledWith('abandoned')
+    expect(ctrl.learnState.state.loadedMidi?.name).toBe('fresh.mid')
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+
+    rejectOld(new Error('stale pending launch failed'))
+    await oldLaunch
+    expect(ctrl.learnState.state.loadedMidi?.name).toBe('fresh.mid')
+    expect(ctx.services.store.setVisualizationForced).toHaveBeenLastCalledWith(null)
+    expect(ctrl.view.value).toBe('exercise')
   })
 })
