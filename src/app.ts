@@ -1248,6 +1248,10 @@ export class App {
       // just for narrowing.
       if (!lease) throw new Error('video export requires a capture lease')
       const { VideoExporter } = await import('./export/VideoExporter')
+      if (import.meta.env.VITE_ENABLE_E2E === '1') {
+        lease.surface.canvas.dataset.e2eCaptureSource =
+          lease.surface === this.pianoRenderer ? 'piano' : 'guitar'
+      }
       const exporter = new VideoExporter(lease.surface.canvas)
       this.currentExporter = exporter
 

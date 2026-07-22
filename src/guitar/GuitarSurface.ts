@@ -578,6 +578,22 @@ export class GuitarSurface implements VisualizationSurface {
       this.panX = centeredPanForFret(follow.fret, this.layout)
     }
     this.draw(active, currentTime)
+    if (import.meta.env.VITE_ENABLE_E2E === '1') {
+      // Read-only semantic snapshot for Playwright's E2E-only build. Pixi pixels
+      // are otherwise opaque; Vite folds this branch away in ordinary builds.
+      const canvas = this.app.canvas as HTMLCanvasElement
+      canvas.dataset.e2eActivePitches = active.map((voice) => voice.pitch).join(',')
+      canvas.dataset.e2eActiveVoices = String(active.length)
+      canvas.dataset.e2eUpcomingVoices = String(this.currentWindow.upcoming.length)
+      canvas.dataset.e2eHighwayFrame = this.currentWindow.upcoming
+        .map((voice) => `${voice.voiceId}:${Math.round((voice.time - currentTime) * 100)}`)
+        .join(',')
+      canvas.dataset.e2eUnsupportedVoices = String(
+        active.filter((voice) => !voice.position).length +
+          this.currentWindow.upcoming.filter((voice) => !voice.position).length,
+      )
+      canvas.dataset.e2ePanX = String(Math.round(this.panX * 100) / 100)
+    }
     for (const layer of this.layers) {
       layer.update?.({
         viewport: this.compatibilityViewport,
