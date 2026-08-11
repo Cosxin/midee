@@ -44,6 +44,7 @@ const zhCN: Messages = {
   'topStrip.context.loading.title': '正在打开 MIDI',
   'topStrip.context.live.kicker': '实时',
   'topStrip.context.live.midiSession': 'MIDI 演奏',
+  'topStrip.context.live.guitar': '点击指板弹奏',
   'topStrip.context.live.keyboard': '用键盘弹奏',
   'topStrip.context.play.kicker': '正在播放',
   'topStrip.context.play.fallback': '打开 MIDI',
@@ -182,6 +183,14 @@ const zhCN: Messages = {
   'keyHint.shortcut.undo': '撤销',
   'keyHint.shortcut.clear': '清空',
   'keyHint.shortcut.metronome': '节拍器',
+
+  'guitarGuide.title': '指板指南',
+  'guitarGuide.tuning': '标准调弦 · 从低音到高音',
+  'guitarGuide.tap': '轻触或点击任意品位',
+  'guitarGuide.drag': '横向拖动以浏览指板',
+  'guitarGuide.keys': '方向键移动 · 回车或空格弹奏',
+  'guitarGuide.show': '显示指板指南',
+  'guitarGuide.hide': '隐藏指板指南',
 
   'chord.aria': '当前发声的和弦',
 

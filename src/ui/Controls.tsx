@@ -120,6 +120,11 @@ export class Controls {
     const m = store.state.mode
     if (m === 'play' || m === 'live') this.wakeUp()
   }
+  private onFocusInDoc = (): void => {
+    const { store } = this.opts.services
+    const m = store.state.mode
+    if (m === 'play' || m === 'live') this.wakeUp()
+  }
   private onKeyDownDoc = (e: KeyboardEvent): void => this.handleKey(e)
 
   constructor(private opts: ControlsOptions) {
@@ -137,6 +142,10 @@ export class Controls {
     const [learnCoachmarkSeen, setLearnCoachmarkSeen] = createSignal(isLearnCoachmarkSeen())
     const [instrumentLoading, setInstrumentLoading] = createSignal(false)
     const [keyHintCollapsed, setKeyHintCollapsed] = createSignal(loadKeyHintHidden())
+    // Guitar's low frets are prime chord-reading space, so its keyboard
+    // reference starts as the existing compact reopen chip. Expansion is
+    // session-only and does not overwrite the user's saved Piano preference.
+    const [guitarKeyHintExpanded, setGuitarKeyHintExpanded] = createSignal(false)
     // Session-only: the HUD always starts open on load (not persisted).
     const [hudClosed, setHudClosed] = createSignal(false)
     const [octave, setOctave] = createSignal(4)
@@ -369,15 +378,26 @@ export class Controls {
           <KeyHintView
             visible={() => mode() === 'live'}
             idle={hudIdle}
-            collapsed={keyHintCollapsed}
+            visualizationMode={visualizationMode}
+            collapsed={() =>
+              visualizationMode() === 'guitar' ? !guitarKeyHintExpanded() : keyHintCollapsed()
+            }
             octave={octave}
             onOctaveDown={() => opts.onOctaveShift?.(-1)}
             onOctaveUp={() => opts.onOctaveShift?.(+1)}
             onClose={() => {
+              if (visualizationMode() === 'guitar') {
+                setGuitarKeyHintExpanded(false)
+                return
+              }
               this.setKeyHintCollapsed(true)
               saveKeyHintHidden(true)
             }}
             onReopen={() => {
+              if (visualizationMode() === 'guitar') {
+                setGuitarKeyHintExpanded(true)
+                return
+              }
               this.setKeyHintCollapsed(false)
               saveKeyHintHidden(false)
             }}
@@ -419,7 +439,11 @@ export class Controls {
       ),
       watch(
         () => store.effectiveVisualizationMode,
-        (m) => setVisualizationMode(m),
+        (m) => {
+          setVisualizationMode(m)
+          if (m === 'guitar') setGuitarKeyHintExpanded(false)
+          this.refreshUi()
+        },
       ),
       watch(
         () => store.state.visualizationForced,
@@ -462,6 +486,7 @@ export class Controls {
     )
 
     document.addEventListener('mousemove', this.onMouseMoveDoc)
+    document.addEventListener('focusin', this.onFocusInDoc)
     document.addEventListener('keydown', this.onKeyDownDoc)
 
     this.refreshUi()
@@ -545,6 +570,7 @@ export class Controls {
     for (const unsub of this.unsubs) unsub()
     this.unsubs = []
     document.removeEventListener('mousemove', this.onMouseMoveDoc)
+    document.removeEventListener('focusin', this.onFocusInDoc)
     document.removeEventListener('keydown', this.onKeyDownDoc)
     this.disposeRoot?.()
     this.disposeRoot = null
@@ -746,7 +772,9 @@ export class Controls {
         title:
           midi.status === 'connected'
             ? midi.deviceName || t('topStrip.context.live.midiSession')
-            : t('topStrip.context.live.keyboard'),
+            : this.opts.services.store.effectiveVisualizationMode === 'guitar'
+              ? t('topStrip.context.live.guitar')
+              : t('topStrip.context.live.keyboard'),
       })
       return
     }

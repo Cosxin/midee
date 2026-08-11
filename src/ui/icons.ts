@@ -237,6 +237,17 @@ export const icons = {
       1.8,
     ),
 
+  // Six strings crossed by fret wire — the Guitar guide must not inherit the
+  // typing-keyboard icon used by the Piano reference.
+  fretboard: (size: Size = 14): string =>
+    svgStroke(
+      size,
+      `<path d="M3 5h18M3 7.8h18M3 10.6h18M3 13.4h18M3 16.2h18M3 19h18"/>` +
+        `<path d="M6 3v18M12 3v18M18 3v18"/>` +
+        `<circle cx="15" cy="10.6" r="1.25" fill="currentColor" stroke="none"/>`,
+      1.25,
+    ),
+
   // Graduation cap silhouette doubling as a "study / practice" cue.
   practice: (size: Size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +

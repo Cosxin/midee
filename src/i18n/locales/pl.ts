@@ -51,6 +51,7 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'topStrip.context.loading.title': 'Otwieranie MIDI',
   'topStrip.context.live.kicker': 'Na żywo',
   'topStrip.context.live.midiSession': 'Sesja MIDI',
+  'topStrip.context.live.guitar': 'Graj na gryfie',
   'topStrip.context.live.keyboard': 'Graj na klawiaturze',
   'topStrip.context.play.kicker': 'Teraz gra',
   'topStrip.context.play.fallback': 'Otwórz MIDI',
@@ -189,6 +190,14 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'keyHint.shortcut.undo': 'Cofnij',
   'keyHint.shortcut.clear': 'Wyczyść',
   'keyHint.shortcut.metronome': 'Metronom',
+
+  'guitarGuide.title': 'Przewodnik po gryfie',
+  'guitarGuide.tuning': 'Strój standardowy · od niskich do wysokich',
+  'guitarGuide.tap': 'Dotknij lub kliknij dowolny próg',
+  'guitarGuide.drag': 'Przeciągnij w bok, aby eksplorować',
+  'guitarGuide.keys': 'Strzałki przesuwają · Enter lub Spacja gra',
+  'guitarGuide.show': 'Pokaż przewodnik po gryfie',
+  'guitarGuide.hide': 'Ukryj przewodnik po gryfie',
 
   'chord.aria': 'Aktualnie brzmiący akord',
 

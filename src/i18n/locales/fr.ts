@@ -50,6 +50,7 @@ const fr: Messages = {
   'topStrip.context.loading.title': 'Ouverture du MIDI',
   'topStrip.context.live.kicker': 'Direct',
   'topStrip.context.live.midiSession': 'Session MIDI',
+  'topStrip.context.live.guitar': 'Jouez sur le manche',
   'topStrip.context.live.keyboard': 'Jouez avec votre clavier',
   'topStrip.context.play.kicker': 'En lecture',
   'topStrip.context.play.fallback': 'Ouvrir MIDI',
@@ -150,6 +151,15 @@ const fr: Messages = {
   'keyHint.shortcut.undo': 'Annuler',
   'keyHint.shortcut.clear': 'Effacer',
   'keyHint.shortcut.metronome': 'Métronome',
+
+  // ── Guide du manche (mode live) ────────────────────────────
+  'guitarGuide.title': 'Guide du manche',
+  'guitarGuide.tuning': 'Accordage standard · du grave à l’aigu',
+  'guitarGuide.tap': 'Touchez ou cliquez sur une frette',
+  'guitarGuide.drag': 'Faites glisser latéralement pour explorer',
+  'guitarGuide.keys': 'Les flèches déplacent · Entrée ou Espace joue',
+  'guitarGuide.show': 'Afficher le guide du manche',
+  'guitarGuide.hide': 'Masquer le guide du manche',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Accord en cours',

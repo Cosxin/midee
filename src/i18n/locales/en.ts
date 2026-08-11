@@ -67,6 +67,7 @@ export const en = {
   'topStrip.context.loading.title': 'Opening MIDI',
   'topStrip.context.live.kicker': 'Live',
   'topStrip.context.live.midiSession': 'MIDI session',
+  'topStrip.context.live.guitar': 'Play on the fretboard',
   'topStrip.context.live.keyboard': 'Play with your keyboard',
   'topStrip.context.play.kicker': 'Now playing',
   'topStrip.context.play.fallback': 'Open MIDI',
@@ -217,6 +218,15 @@ export const en = {
   'keyHint.shortcut.undo': 'Undo',
   'keyHint.shortcut.clear': 'Clear',
   'keyHint.shortcut.metronome': 'Metronome',
+
+  // ── Guitar fretboard guide (live mode) ─────────────────────
+  'guitarGuide.title': 'Fretboard guide',
+  'guitarGuide.tuning': 'Standard tuning · low to high',
+  'guitarGuide.tap': 'Tap or click any fret',
+  'guitarGuide.drag': 'Drag sideways to explore',
+  'guitarGuide.keys': 'Arrow keys move · Enter or Space plays',
+  'guitarGuide.show': 'Show fretboard guide',
+  'guitarGuide.hide': 'Hide fretboard guide',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Currently sounding chord',
