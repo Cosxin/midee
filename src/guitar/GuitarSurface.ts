@@ -34,6 +34,11 @@ import { candidatePositions, STANDARD_GUITAR_PROFILE } from './profile'
 import type { AssignedGuitarVoice, GuitarPosition, GuitarVoice } from './types'
 
 const HIGHWAY_SECONDS = 2.4
+const HIGHWAY_HEADER_MIN_Y = 146
+const HIGHWAY_HEADER_MAX_Y = 154
+const MOBILE_HIGHWAY_HEADER_MIN_Y = 132
+const MOBILE_HIGHWAY_HEADER_MAX_Y = 142
+const DOUBLE_FRET_MARKERS = new Set([12, 24])
 export const GUITAR_CLUSTER_WINDOW_SECONDS = 0.04
 const IDLE_GRACE_FRAMES = 30
 const STRING_NAMES = ['Low E', 'A', 'D', 'G', 'B', 'High E'] as const
@@ -649,63 +654,177 @@ export class GuitarSurface implements VisualizationSurface {
     g.rect(0, 0, this.layout.width, this.layout.highwayHeight).fill({
       color: this.theme.background,
     })
+
+    const laneWidth = this.layout.width / GUITAR_STRING_COUNT
+    const headerY = this.highwayHeaderY()
+    const lineTop = Math.min(this.layout.highwayHeight - 18, headerY + 18)
+    const nowY = this.layout.highwayHeight - 12
+    const travelTop = Math.min(nowY - 1, headerY + 28)
+
+    // Alternating lane washes and time guides make dense passages easier to
+    // scan without competing with the track colors used for actual notes.
+    for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
+      if (string % 2 === 0) {
+        g.rect(string * laneWidth, 0, laneWidth, this.layout.highwayHeight).fill({
+          color: this.theme.whiteKey,
+          alpha: 0.012,
+        })
+      }
+    }
+    for (let guide = 1; guide <= 3; guide++) {
+      const y = travelTop + ((nowY - travelTop) * guide) / 4
+      g.moveTo(0, y).lineTo(this.layout.width, y).stroke({
+        color: this.theme.whiteKey,
+        alpha: 0.045,
+        width: 1,
+      })
+    }
+
     for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
       const x = highwayLaneX(string, this.layout)
-      g.moveTo(x, 28)
-        .lineTo(x, this.layout.highwayHeight)
-        .stroke({
-          color: this.theme.whiteKey,
-          alpha: 0.22,
-          width: 1 + string * 0.18,
-        })
-      this.addText(STRING_NAMES[string]!, x, 14, 11, 0.7, 0.5)
+      const stringWidth = 1 + (GUITAR_STRING_COUNT - 1 - string) * 0.2
+      g.moveTo(x, lineTop).lineTo(x, this.layout.highwayHeight).stroke({
+        color: this.theme.whiteKey,
+        alpha: 0.22,
+        width: stringWidth,
+      })
+      const pillWidth = Math.min(64, Math.max(42, laneWidth - 14))
+      g.roundRect(x - pillWidth / 2, headerY - 11, pillWidth, 22, 11)
+        .fill({ color: this.theme.blackKey, alpha: 0.78 })
+        .stroke({ color: this.theme.whiteKey, alpha: 0.12, width: 1 })
+      this.addText(STRING_NAMES[string]!, x, headerY, 10, 0.82, 0.5, '600')
     }
-    const nowY = this.layout.highwayHeight - 12
-    g.moveTo(0, nowY).lineTo(this.layout.width, nowY).stroke({
-      color: this.theme.nowLine,
-      alpha: this.theme.nowLineAlpha,
-      width: 2,
-    })
+
+    // A soft outer rail plus a crisp core keeps the strike line legible in
+    // every theme while preserving the theme's own accent strength.
+    g.moveTo(0, nowY)
+      .lineTo(this.layout.width, nowY)
+      .stroke({
+        color: this.theme.nowLineGlow,
+        alpha: this.theme.nowLineAlpha * 0.28,
+        width: 7,
+      })
+    g.moveTo(0, nowY)
+      .lineTo(this.layout.width, nowY)
+      .stroke({
+        color: this.theme.nowLine,
+        alpha: Math.min(0.82, this.theme.nowLineAlpha * 2.8),
+        width: 1.5,
+      })
     for (const voice of this.currentWindow.upcoming) {
       const delta = voice.time - currentTime
       if (delta < 0 || delta > HIGHWAY_SECONDS) continue
-      const y = nowY - (delta / HIGHWAY_SECONDS) * Math.max(1, nowY - 34)
+      const y = nowY - (delta / HIGHWAY_SECONDS) * Math.max(1, nowY - travelTop)
       if (!voice.position) {
         this.drawUnsupported(g, voice, this.colorForVoice(voice), 0, y)
         continue
       }
       const x = highwayLaneX(voice.position.string, this.layout)
-      g.circle(x, y, 7).fill({ color: this.colorForVoice(voice), alpha: 0.88 })
-      this.addText(String(voice.position.fret), x, y, 9, 1, 0.5)
+      const color = this.colorForVoice(voice)
+      const sustainHeight = Math.min(
+        Math.max(0, y - travelTop),
+        (voice.duration / HIGHWAY_SECONDS) * Math.max(1, nowY - travelTop),
+      )
+      if (sustainHeight > 4) {
+        g.roundRect(x - 3, y - sustainHeight, 6, sustainHeight, 3).fill({
+          color,
+          alpha: 0.28,
+        })
+      }
+      g.circle(x, y, 13).fill({ color, alpha: 0.12 })
+      g.circle(x, y, 8)
+        .fill({ color, alpha: 0.96 })
+        .stroke({ color: this.theme.whiteKey, alpha: 0.42, width: 1 })
+      this.addText(String(voice.position.fret), x, y, 9, 1, 0.5, '600')
     }
   }
 
   private drawFretboard(g: Graphics): void {
     g.rect(0, this.layout.fretboardTop, this.layout.width, this.layout.fretboardHeight).fill({
       color: this.theme.blackKey,
-      alpha: 0.92,
+      alpha: 0.96,
     })
+
+    // Subtle row and fret variation gives the board material depth while
+    // keeping the note colors as the only saturated elements.
+    for (let row = 0; row < GUITAR_STRING_COUNT; row++) {
+      if (row % 2 === 0) {
+        g.rect(
+          FRETBOARD_LABEL_WIDTH,
+          this.layout.fretboardTop + row * this.layout.stringHeight,
+          this.layout.width - FRETBOARD_LABEL_WIDTH,
+          this.layout.stringHeight,
+        ).fill({ color: this.theme.whiteKey, alpha: 0.014 })
+      }
+    }
+
     for (let fret = 0; fret <= GUITAR_MAX_FRET; fret++) {
       const x = FRETBOARD_LABEL_WIDTH + fret * this.layout.fretWidth - this.panX
       if (x + this.layout.fretWidth < FRETBOARD_LABEL_WIDTH || x > this.layout.width) continue
+      g.rect(x, this.layout.fretboardTop, this.layout.fretWidth, this.layout.fretboardHeight).fill({
+        color: this.theme.whiteKey,
+        alpha: fret === 0 ? 0.024 : fret % 2 === 0 ? 0.018 : 0.006,
+      })
+
+      if (FRET_MARKERS.has(fret)) {
+        const markerX = x + this.layout.fretWidth / 2
+        const markerYs = DOUBLE_FRET_MARKERS.has(fret)
+          ? [
+              this.layout.fretboardTop + this.layout.fretboardHeight * 0.34,
+              this.layout.fretboardTop + this.layout.fretboardHeight * 0.66,
+            ]
+          : [this.layout.fretboardTop + this.layout.fretboardHeight / 2]
+        for (const markerY of markerYs) {
+          g.circle(markerX, markerY, 4).fill({ color: this.theme.whiteKey, alpha: 0.13 })
+        }
+      }
+
+      const isNut = fret === 1
       g.moveTo(x, this.layout.fretboardTop)
         .lineTo(x, this.layout.height)
-        .stroke({ color: this.theme.keyBorder, alpha: 0.85, width: fret === 0 ? 3 : 1 })
+        .stroke({
+          color: isNut ? this.theme.whiteKey : this.theme.keyBorder,
+          alpha: isNut ? 0.42 : 0.9,
+          width: isNut ? 3 : 1,
+        })
       if (fret === 0 || FRET_MARKERS.has(fret)) {
-        this.addText(String(fret), x + this.layout.fretWidth / 2, this.layout.fretboardTop + 10, 10)
+        this.addText(
+          String(fret),
+          x + this.layout.fretWidth / 2,
+          this.layout.fretboardTop + 11,
+          10,
+          0.7,
+          0.5,
+          '600',
+        )
       }
     }
+
     for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
       const y = fretboardStringY(string, this.layout)
+      const stringWidth = 1 + (GUITAR_STRING_COUNT - 1 - string) * 0.22
       g.moveTo(FRETBOARD_LABEL_WIDTH, y)
         .lineTo(this.layout.width, y)
-        .stroke({ color: this.theme.whiteKey, alpha: 0.5, width: 1 + string * 0.22 })
-      this.addText(STRING_NAMES[string]!, FRETBOARD_LABEL_WIDTH / 2, y, 10, 0.8)
+        .stroke({ color: 0x000000, alpha: 0.42, width: stringWidth + 2 })
+      g.moveTo(FRETBOARD_LABEL_WIDTH, y)
+        .lineTo(this.layout.width, y)
+        .stroke({ color: this.theme.whiteKey, alpha: 0.58, width: stringWidth })
+      this.addText(STRING_NAMES[string]!, FRETBOARD_LABEL_WIDTH / 2, y, 10, 0.82, 0.5, '600')
     }
+
     g.rect(0, this.layout.fretboardTop, FRETBOARD_LABEL_WIDTH, this.layout.fretboardHeight).fill({
       color: this.theme.background,
-      alpha: 0.96,
+      alpha: 0.98,
     })
+    g.moveTo(FRETBOARD_LABEL_WIDTH, this.layout.fretboardTop)
+      .lineTo(FRETBOARD_LABEL_WIDTH, this.layout.height)
+      .stroke({ color: this.theme.whiteKey, alpha: 0.16, width: 1 })
+    g.moveTo(0, this.layout.fretboardTop)
+      .lineTo(this.layout.width, this.layout.fretboardTop)
+      .stroke({ color: this.theme.nowLineGlow, alpha: 0.12, width: 6 })
+    g.moveTo(0, this.layout.fretboardTop)
+      .lineTo(this.layout.width, this.layout.fretboardTop)
+      .stroke({ color: this.theme.nowLine, alpha: 0.3, width: 1.5 })
   }
 
   private drawPracticeHints(g: Graphics, active: readonly AssignedGuitarVoice[]): void {
@@ -729,7 +848,11 @@ export class GuitarSurface implements VisualizationSurface {
         }
         const rect = positionRect(position, this.layout, this.panX)
         if (rect.x + rect.width < FRETBOARD_LABEL_WIDTH || rect.x > this.layout.width) continue
-        g.roundRect(rect.x + 6, rect.y + 6, rect.width - 12, rect.height - 12, 8)
+        const pillWidth = Math.max(24, Math.min(52, rect.width - 14))
+        const pillHeight = Math.max(24, Math.min(34, rect.height - 14))
+        const pillX = rect.x + (rect.width - pillWidth) / 2
+        const pillY = rect.y + (rect.height - pillHeight) / 2
+        g.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2)
           .fill({
             color: accepted
               ? this.theme.nowLine
@@ -747,11 +870,27 @@ export class GuitarSurface implements VisualizationSurface {
     const hintPitch = pitchAtPosition(position)
     const pending = this.practicePending?.has(hintPitch) ?? false
     const accepted = this.practiceAccepted?.has(hintPitch) ?? false
-    g.roundRect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8, 8).fill({
-      color: accepted ? this.theme.nowLine : color,
-      alpha: pending ? 0.58 : 0.92,
+    const activeColor = accepted ? this.theme.nowLine : color
+    const pillWidth = Math.max(26, Math.min(54, rect.width - 12))
+    const pillHeight = Math.max(26, Math.min(36, rect.height - 12))
+    const pillX = rect.x + (rect.width - pillWidth) / 2
+    const pillY = rect.y + (rect.height - pillHeight) / 2
+    g.roundRect(pillX - 6, pillY - 6, pillWidth + 12, pillHeight + 12, pillHeight / 2 + 6).fill({
+      color: activeColor,
+      alpha: 0.13,
     })
-    this.addText(String(position.fret), rect.x + rect.width / 2, rect.y + rect.height / 2, 12)
+    g.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2)
+      .fill({ color: activeColor, alpha: pending ? 0.66 : 0.94 })
+      .stroke({ color: this.theme.whiteKey, alpha: 0.46, width: 1 })
+    this.addText(
+      String(position.fret),
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2,
+      12,
+      1,
+      0.5,
+      '600',
+    )
   }
 
   private drawUnsupported(
@@ -759,10 +898,10 @@ export class GuitarSurface implements VisualizationSurface {
     voice: AssignedGuitarVoice,
     color: number,
     row: number,
-    y = 18,
+    y?: number,
   ): void {
     const railX = this.layout.width - 14
-    const railY = Math.min(this.layout.highwayHeight - 18, y + row * 18)
+    const railY = Math.min(this.layout.highwayHeight - 18, (y ?? this.highwayHeaderY()) + row * 18)
     g.circle(railX, railY, 6).fill({ color, alpha: 0.7 })
     g.moveTo(railX - 4, railY - 4)
       .lineTo(railX + 4, railY + 4)
@@ -778,6 +917,20 @@ export class GuitarSurface implements VisualizationSurface {
     return this.theme.trackColors[0] ?? this.theme.nowLine
   }
 
+  private highwayHeaderY(): number {
+    const mobilePortrait = this.layout.width <= 640 && this.layout.height >= this.layout.width
+    const minimum = mobilePortrait ? MOBILE_HIGHWAY_HEADER_MIN_Y : HIGHWAY_HEADER_MIN_Y
+    const maximum = mobilePortrait ? MOBILE_HIGHWAY_HEADER_MAX_Y : HIGHWAY_HEADER_MAX_Y
+    return Math.max(
+      0,
+      Math.min(
+        maximum,
+        Math.max(minimum, this.layout.highwayHeight * 0.2),
+        this.layout.highwayHeight - 32,
+      ),
+    )
+  }
+
   private addText(
     text: string,
     x: number,
@@ -785,6 +938,7 @@ export class GuitarSurface implements VisualizationSurface {
     size: number,
     alpha = 0.85,
     anchor = 0.5,
+    fontWeight: '400' | '500' | '600' = '500',
   ): void {
     const label = new Text({
       text,
@@ -792,6 +946,7 @@ export class GuitarSurface implements VisualizationSurface {
         fill: this.theme.whiteKey,
         fontFamily: 'Inter, sans-serif',
         fontSize: size,
+        fontWeight,
       }),
     })
     label.anchor.set(anchor)

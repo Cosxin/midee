@@ -48,6 +48,110 @@ async function scrubberValuesAcrossFrames(page: Page, frameCount: number): Promi
 }
 
 test.describe('Guitar visualization', () => {
+  test('docks desktop controls above the fretboard so the live chord view stays clear', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1200, height: 838 })
+    await page.goto('/')
+    await page.locator('#home-live').click()
+    await selectGuitar(page)
+
+    const topStrip = page.locator('#top-strip')
+    const hud = page.locator('#hud')
+    const keyHint = page.locator('#key-hint')
+    const firstFret = page.getByRole('button', { name: 'String 1, fret 0, note E4' })
+    await expect(hud).toBeVisible()
+    await expect(page.locator('#hud-drag')).toBeHidden()
+    await expect(page.locator('#hud .hud-pin-btn')).toBeVisible()
+    await expect(topStrip).toContainText('Play on the fretboard')
+    await expect(keyHint).toHaveAttribute('data-guide', 'guitar')
+    await expect(keyHint).toHaveClass(/kh--collapsed/)
+    await expect(keyHint.locator('.kh-body')).toBeHidden()
+    const reopenGuide = page.locator('#kh-reopen')
+    await expect(reopenGuide).toBeVisible()
+    await expect(reopenGuide).toHaveAttribute('aria-label', 'Show fretboard guide')
+
+    // Guitar gets a real fretboard guide — standard string tuning and direct
+    // surface gestures, with none of Piano's QWERTY or octave controls.
+    await reopenGuide.click()
+    const guitarGuide = keyHint.locator('.gh-body')
+    await expect(guitarGuide).toBeVisible()
+    await expect(guitarGuide).toContainText('Fretboard guide')
+    await expect(guitarGuide.locator('.gh-tuning-notes > span')).toHaveText([
+      'E',
+      'A',
+      'D',
+      'G',
+      'B',
+      'E',
+    ])
+    await expect(guitarGuide.locator('kbd')).toHaveCount(0)
+    await expect(page.locator('#kh-octave-down')).toHaveCount(0)
+
+    const guideBox = (await guitarGuide.boundingBox())!
+    const expandedFretBox = (await firstFret.boundingBox())!
+    expect(guideBox.y + guideBox.height).toBeLessThan(expandedFretBox.y)
+
+    // The guide folds back without changing the user's saved Piano preference.
+    await page.locator('#kh-close').click()
+    await expect(keyHint).toHaveClass(/kh--collapsed/)
+
+    const topBox = (await topStrip.boundingBox())!
+    const hudBox = (await hud.boundingBox())!
+    const fretBox = (await firstFret.boundingBox())!
+    expect(hudBox.y).toBeGreaterThanOrEqual(topBox.y + topBox.height + 4)
+    expect(hudBox.y + hudBox.height).toBeLessThan(fretBox.y)
+
+    // The fixed dock is guitar-specific. Piano restores the draggable lower
+    // HUD instead of inheriting Guitar's control-band placement.
+    await page.getByRole('radio', { name: 'Show piano visualization' }).check()
+    await expect(keyHint).toHaveAttribute('data-guide', 'piano')
+    await expect(topStrip).toContainText('Play with your keyboard')
+    await expect(keyHint.locator('.kh-keys').first()).toBeVisible()
+    await expect(page.locator('#kh-octave-down')).toBeVisible()
+    expect(await keyHint.locator('kbd').count()).toBeGreaterThan(0)
+    await expect(page.locator('#hud-drag')).toBeVisible()
+    const pianoHudBox = (await hud.boundingBox())!
+    expect(pianoHudBox.y).toBeGreaterThan(hudBox.y + hudBox.height)
+  })
+
+  test('keeps an active MIDI chord readable after the Guitar controls idle', async ({ page }) => {
+    await installFakeMidi(page)
+    await page.setViewportSize({ width: 1200, height: 838 })
+    await page.goto('/')
+    await page.locator('#home-live').click()
+    await selectGuitar(page)
+
+    const topStrip = page.locator('#top-strip')
+    const hud = page.locator('#hud')
+    const chord = page.locator('#ts-chord-readout')
+    const tonic = chord.locator('.ts-chord-readout-tonic')
+
+    // Let pointer-free Live mode settle into its distraction-free state.
+    await expect(hud).toHaveClass(/float-hud--idle/, { timeout: 7000 })
+    await expect(hud).toHaveCSS('opacity', '0')
+    await expect(topStrip).toHaveCSS('opacity', '0.16')
+
+    // A MIDI controller does not move the pointer or focus the page. The
+    // transport therefore stays asleep while the sounding chord itself becomes
+    // fully legible and the rest of the top strip remains visually secondary.
+    await sendMidi(page, [0x90, 60, 100])
+    await sendMidi(page, [0x90, 64, 100])
+    await sendMidi(page, [0x90, 67, 100])
+    await expect(tonic).toHaveText('C')
+    await expect(hud).toHaveClass(/float-hud--idle/)
+    await expect(hud).toHaveCSS('opacity', '0')
+    await expect(topStrip).toHaveCSS('opacity', '1')
+    await expect(topStrip.locator(':scope > .ts-home')).toHaveCSS('opacity', '0.16')
+    await expect(chord).toHaveCSS('opacity', '1')
+
+    await sendMidi(page, [0x80, 60, 0])
+    await sendMidi(page, [0x80, 64, 0])
+    await sendMidi(page, [0x80, 67, 0])
+    await expect(tonic).toHaveText('—')
+    await expect(topStrip).toHaveCSS('opacity', '0.16')
+  })
+
   test('keyboard fretboard grid activates notes, owns navigation, and remains pointer-transparent', async ({
     page,
   }) => {

@@ -47,6 +47,7 @@ const ptBR: Messages = {
   'topStrip.context.loading.title': 'Abrindo MIDI',
   'topStrip.context.live.kicker': 'Ao vivo',
   'topStrip.context.live.midiSession': 'Sessão MIDI',
+  'topStrip.context.live.guitar': 'Toque no braço',
   'topStrip.context.live.keyboard': 'Toque com seu teclado',
   'topStrip.context.play.kicker': 'Tocando agora',
   'topStrip.context.play.fallback': 'Abrir MIDI',
@@ -148,6 +149,15 @@ const ptBR: Messages = {
   'keyHint.shortcut.undo': 'Desfazer',
   'keyHint.shortcut.clear': 'Limpar',
   'keyHint.shortcut.metronome': 'Metrônomo',
+
+  // ── Guia do braço (modo live) ──────────────────────────────
+  'guitarGuide.title': 'Guia do braço',
+  'guitarGuide.tuning': 'Afinação padrão · do grave ao agudo',
+  'guitarGuide.tap': 'Toque ou clique em qualquer casa',
+  'guitarGuide.drag': 'Arraste para os lados para explorar',
+  'guitarGuide.keys': 'Setas movem · Enter ou Espaço toca',
+  'guitarGuide.show': 'Mostrar guia do braço',
+  'guitarGuide.hide': 'Ocultar guia do braço',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Acorde tocando',

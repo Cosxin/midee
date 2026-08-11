@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, onMount } from 'solid-js'
+import { createEffect, onCleanup, onMount, Show } from 'solid-js'
 import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
@@ -98,6 +98,7 @@ export interface KeyHintProps {
   visible: () => boolean
   idle: () => boolean
   collapsed: () => boolean
+  visualizationMode: () => VisualizationMode
   octave: () => number
   onOctaveDown: () => void
   onOctaveUp: () => void
@@ -597,114 +598,192 @@ export function HudView(props: HudProps) {
 }
 
 export function KeyHintView(props: KeyHintProps) {
+  const isGuitar = (): boolean => props.visualizationMode() === 'guitar'
+
   return (
     <div
       id="key-hint"
+      data-guide={isGuitar() ? 'guitar' : 'piano'}
       classList={{
         'kh--visible': props.visible(),
         'kh--idle': props.idle(),
         'kh--collapsed': props.collapsed(),
+        'kh--guitar': isGuitar(),
+        'kh--piano': !isGuitar(),
       }}
     >
-      <div class="kh-body">
-        <div class="kh-section kh-section--first">
-          <div class="kh-section-head">
-            <span class="kh-label">{t('keyHint.play')}</span>
+      <Show
+        when={isGuitar()}
+        fallback={
+          <div class="kh-body">
+            <div class="kh-section kh-section--first">
+              <div class="kh-section-head">
+                <span class="kh-label">{t('keyHint.play')}</span>
+                <button
+                  class="kh-close"
+                  id="kh-close"
+                  type="button"
+                  aria-label={t('hud.aria.kbdRefHide')}
+                  data-tip={t('hud.tip.kbdRefHide')}
+                  onClick={() => props.onClose()}
+                  innerHTML={icons.smallClose()}
+                />
+              </div>
+              <span class="kh-keys">
+                <kbd>Z</kbd>
+                <kbd>X</kbd>
+                <kbd>C</kbd>
+                <kbd>V</kbd>
+                <span class="kh-divider" aria-hidden="true" />
+                <kbd>Q</kbd>
+                <kbd>W</kbd>
+                <kbd>E</kbd>
+                <kbd>R</kbd>
+              </span>
+            </div>
+
+            <div class="kh-section">
+              <span class="kh-label">{t('keyHint.octave')}</span>
+              <span class="kh-keys">
+                <button
+                  class="kh-cap-btn"
+                  id="kh-octave-down"
+                  type="button"
+                  aria-label={t('hud.aria.octaveDown')}
+                  data-tip={t('hud.tip.octaveDown')}
+                  onClick={() => props.onOctaveDown()}
+                >
+                  <kbd class="kh-cap-sym">↓</kbd>
+                </button>
+                <button
+                  class="kh-cap-btn"
+                  id="kh-octave-up"
+                  type="button"
+                  aria-label={t('hud.aria.octaveUp')}
+                  data-tip={t('hud.tip.octaveUp')}
+                  onClick={() => props.onOctaveUp()}
+                >
+                  <kbd class="kh-cap-sym">↑</kbd>
+                </button>
+                <span class="kh-octave-pill" id="kh-octave">
+                  C{props.octave()}
+                </span>
+              </span>
+            </div>
+
+            <div class="kh-section">
+              <span class="kh-label">{t('keyHint.shortcuts')}</span>
+              <div class="kh-shortcuts">
+                <span class="kh-combo">
+                  <kbd>Tab</kbd>
+                  <span>{t('keyHint.shortcut.record')}</span>
+                </span>
+                <span class="kh-combo">
+                  <span class="kh-cap-group">
+                    <kbd class="kh-cap-sym">⇧</kbd>
+                    <kbd>L</kbd>
+                  </span>
+                  <span>{t('keyHint.shortcut.loop')}</span>
+                </span>
+                <span class="kh-combo">
+                  <span class="kh-cap-group">
+                    <kbd class="kh-cap-sym">⇧</kbd>
+                    <kbd>U</kbd>
+                  </span>
+                  <span>{t('keyHint.shortcut.undo')}</span>
+                </span>
+                <span class="kh-combo">
+                  <span class="kh-cap-group">
+                    <kbd class="kh-cap-sym">⇧</kbd>
+                    <kbd>C</kbd>
+                  </span>
+                  <span>{t('keyHint.shortcut.clear')}</span>
+                </span>
+                <span class="kh-combo">
+                  <kbd class="kh-cap-sym">`</kbd>
+                  <span>{t('keyHint.shortcut.metronome')}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        }
+      >
+        <section class="kh-body gh-body" aria-label={t('guitarGuide.title')}>
+          <div class="gh-head">
+            <span class="gh-heading-icon" aria-hidden="true" innerHTML={icons.fretboard(16)} />
+            <span class="gh-heading-copy">
+              <span class="gh-kicker">{t('instrument.guitar.name')}</span>
+              <span class="gh-title">{t('guitarGuide.title')}</span>
+            </span>
             <button
               class="kh-close"
               id="kh-close"
               type="button"
-              aria-label={t('hud.aria.kbdRefHide')}
-              data-tip={t('hud.tip.kbdRefHide')}
+              aria-label={t('guitarGuide.hide')}
+              data-tip={t('guitarGuide.hide')}
               onClick={() => props.onClose()}
               innerHTML={icons.smallClose()}
             />
           </div>
-          <span class="kh-keys">
-            <kbd>Z</kbd>
-            <kbd>X</kbd>
-            <kbd>C</kbd>
-            <kbd>V</kbd>
-            <span class="kh-divider" aria-hidden="true" />
-            <kbd>Q</kbd>
-            <kbd>W</kbd>
-            <kbd>E</kbd>
-            <kbd>R</kbd>
-          </span>
-        </div>
 
-        <div class="kh-section">
-          <span class="kh-label">{t('keyHint.octave')}</span>
-          <span class="kh-keys">
-            <button
-              class="kh-cap-btn"
-              id="kh-octave-down"
-              type="button"
-              aria-label={t('hud.aria.octaveDown')}
-              data-tip={t('hud.tip.octaveDown')}
-              onClick={() => props.onOctaveDown()}
-            >
-              <kbd class="kh-cap-sym">↓</kbd>
-            </button>
-            <button
-              class="kh-cap-btn"
-              id="kh-octave-up"
-              type="button"
-              aria-label={t('hud.aria.octaveUp')}
-              data-tip={t('hud.tip.octaveUp')}
-              onClick={() => props.onOctaveUp()}
-            >
-              <kbd class="kh-cap-sym">↑</kbd>
-            </button>
-            <span class="kh-octave-pill" id="kh-octave">
-              C{props.octave()}
-            </span>
-          </span>
-        </div>
+          <div class="gh-neck">
+            <div class="gh-tuning-head">
+              <span>{t('guitarGuide.tuning')}</span>
+              <span class="gh-tuning-notes">
+                <span>E</span>
+                <span>A</span>
+                <span>D</span>
+                <span>G</span>
+                <span>B</span>
+                <span>E</span>
+              </span>
+            </div>
+            <div class="gh-fretboard" aria-hidden="true">
+              <span class="gh-fret gh-fret--1" />
+              <span class="gh-fret gh-fret--2" />
+              <span class="gh-fret gh-fret--3" />
+              <span class="gh-fret gh-fret--4" />
+              <span class="gh-string gh-string--1" />
+              <span class="gh-string gh-string--2" />
+              <span class="gh-string gh-string--3" />
+              <span class="gh-string gh-string--4" />
+              <span class="gh-string gh-string--5" />
+              <span class="gh-string gh-string--6" />
+              <span class="gh-marker gh-marker--3" />
+              <span class="gh-marker gh-marker--5" />
+              <span class="gh-touch-dot" />
+            </div>
+          </div>
 
-        <div class="kh-section">
-          <span class="kh-label">{t('keyHint.shortcuts')}</span>
-          <div class="kh-shortcuts">
-            <span class="kh-combo">
-              <kbd>Tab</kbd>
-              <span>{t('keyHint.shortcut.record')}</span>
+          <div class="gh-actions">
+            <span class="gh-action">
+              <span class="gh-action-mark gh-action-mark--tap" aria-hidden="true" />
+              <span>{t('guitarGuide.tap')}</span>
             </span>
-            <span class="kh-combo">
-              <span class="kh-cap-group">
-                <kbd class="kh-cap-sym">⇧</kbd>
-                <kbd>L</kbd>
+            <span class="gh-action">
+              <span class="gh-action-mark gh-action-mark--drag" aria-hidden="true">
+                ↔
               </span>
-              <span>{t('keyHint.shortcut.loop')}</span>
-            </span>
-            <span class="kh-combo">
-              <span class="kh-cap-group">
-                <kbd class="kh-cap-sym">⇧</kbd>
-                <kbd>U</kbd>
-              </span>
-              <span>{t('keyHint.shortcut.undo')}</span>
-            </span>
-            <span class="kh-combo">
-              <span class="kh-cap-group">
-                <kbd class="kh-cap-sym">⇧</kbd>
-                <kbd>C</kbd>
-              </span>
-              <span>{t('keyHint.shortcut.clear')}</span>
-            </span>
-            <span class="kh-combo">
-              <kbd class="kh-cap-sym">`</kbd>
-              <span>{t('keyHint.shortcut.metronome')}</span>
+              <span>{t('guitarGuide.drag')}</span>
             </span>
           </div>
-        </div>
-      </div>
+
+          <div class="gh-keyboard-note">
+            <span class="gh-arrows" aria-hidden="true">
+              ← ↑ ↓ →
+            </span>
+            <span>{t('guitarGuide.keys')}</span>
+          </div>
+        </section>
+      </Show>
       <button
         class="kh-reopen"
         id="kh-reopen"
         type="button"
-        aria-label={t('hud.aria.kbdRefShow')}
-        data-tip={t('hud.tip.kbdRefShow')}
+        aria-label={isGuitar() ? t('guitarGuide.show') : t('hud.aria.kbdRefShow')}
+        data-tip={isGuitar() ? t('guitarGuide.show') : t('hud.tip.kbdRefShow')}
         onClick={() => props.onReopen()}
-        innerHTML={icons.keycap()}
+        innerHTML={isGuitar() ? icons.fretboard() : icons.keycap()}
       />
     </div>
   )

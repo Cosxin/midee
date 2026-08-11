@@ -47,6 +47,7 @@ const es: Messages = {
   'topStrip.context.loading.title': 'Abriendo MIDI',
   'topStrip.context.live.kicker': 'En vivo',
   'topStrip.context.live.midiSession': 'Sesión MIDI',
+  'topStrip.context.live.guitar': 'Toca en el diapasón',
   'topStrip.context.live.keyboard': 'Toca con tu teclado',
   'topStrip.context.play.kicker': 'Reproduciendo',
   'topStrip.context.play.fallback': 'Abrir MIDI',
@@ -147,6 +148,15 @@ const es: Messages = {
   'keyHint.shortcut.undo': 'Deshacer',
   'keyHint.shortcut.clear': 'Borrar',
   'keyHint.shortcut.metronome': 'Metrónomo',
+
+  // ── Guía del diapasón (modo live) ──────────────────────────
+  'guitarGuide.title': 'Guía del diapasón',
+  'guitarGuide.tuning': 'Afinación estándar · de grave a agudo',
+  'guitarGuide.tap': 'Toca o haz clic en cualquier traste',
+  'guitarGuide.drag': 'Arrastra lateralmente para explorar',
+  'guitarGuide.keys': 'Las flechas mueven · Intro o Espacio toca',
+  'guitarGuide.show': 'Mostrar guía del diapasón',
+  'guitarGuide.hide': 'Ocultar guía del diapasón',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Acorde sonando',
