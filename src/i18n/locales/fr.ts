@@ -82,7 +82,7 @@ const fr: Messages = {
   'customize.theme': 'Thème',
   'customize.particles': 'Particules',
   'customize.chord': 'Affichage des accords',
-  'customize.chord.sub': 'Nommer les accords joués · mode direct',
+  'customize.chord.sub': 'Nommer les accords joués',
   'customize.language': 'Langue',
   'feedback.menu': 'Avis & suggestions',
   'feedback.postSession': 'Une idée pour l’améliorer ? Dites-le-nous',
@@ -153,7 +153,7 @@ const fr: Messages = {
   'keyHint.shortcut.clear': 'Effacer',
   'keyHint.shortcut.metronome': 'Métronome',
 
-  // ── Guide du manche (mode live) ────────────────────────────
+  // ── Guide du manche (direct et lecture MIDI) ───────────────
   'guitarGuide.title': 'Guide du manche',
   'guitarGuide.position': 'Position',
   'guitarGuide.tune': 'Accordage',

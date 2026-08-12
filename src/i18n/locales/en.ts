@@ -100,7 +100,7 @@ export const en = {
   'customize.theme': 'Theme',
   'customize.particles': 'Particles',
   'customize.chord': 'Chord readout',
-  'customize.chord.sub': "Name what's sounding · live mode",
+  'customize.chord.sub': "Name what's sounding",
   'customize.language': 'Language',
   'feedback.menu': 'Feedback & feature requests',
   'feedback.postSession': 'Wish this worked differently? Tell us',
@@ -220,7 +220,7 @@ export const en = {
   'keyHint.shortcut.clear': 'Clear',
   'keyHint.shortcut.metronome': 'Metronome',
 
-  // ── Guitar fretboard guide (live mode) ─────────────────────
+  // ── Guitar fretboard guide (Live and MIDI playback) ────────
   'guitarGuide.title': 'Fretboard guide',
   'guitarGuide.position': 'Position',
   'guitarGuide.tune': 'Tune',

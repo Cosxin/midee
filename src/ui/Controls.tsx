@@ -416,8 +416,14 @@ export class Controls {
             <span>{t('guitarGuide.empty')}</span>
           </div>
           <KeyHintView
-            visible={() => mode() === 'live'}
-            idle={hudIdle}
+            visible={() =>
+              mode() === 'live' ||
+              (mode() === 'play' && hasFile() && visualizationMode() === 'guitar')
+            }
+            // The guitar rail is part of the instrument, so it stays put while
+            // a MIDI file plays. Piano's optional keyboard shortcut card keeps
+            // the existing idle fade behavior.
+            idle={() => (visualizationMode() === 'guitar' ? false : hudIdle())}
             visualizationMode={visualizationMode}
             collapsed={() =>
               visualizationMode() === 'guitar' ? !guitarKeyHintExpanded() : keyHintCollapsed()
@@ -499,7 +505,9 @@ export class Controls {
     )
 
     const guideOpen = (): boolean =>
-      mode() === 'live' && visualizationMode() === 'guitar' && guitarKeyHintExpanded()
+      visualizationMode() === 'guitar' &&
+      guitarKeyHintExpanded() &&
+      (mode() === 'live' || (mode() === 'play' && hasFile()))
     document.body.classList.toggle('guitar-guide-open', guideOpen())
     this.unsubs.push(
       watch(guideOpen, (open) => document.body.classList.toggle('guitar-guide-open', open)),

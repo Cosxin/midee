@@ -467,13 +467,16 @@ export class App {
     this.chordOverlay = new ChordOverlay(this.controls.chordSlot)
     this.chordOverlayOn = chordOverlayStore.load()
     this.applyChordOverlayVisibility()
-    // File mode actively plays a MIDI — the chord chip would just narrate
-    // what the user is already hearing without contributing to "play along"
-    // affordances. Keep it scoped to live/home where it confirms what the
-    // player is sounding.
+    // The guitar guide makes harmonic feedback useful in both Live and MIDI
+    // playback. Piano Play keeps its transport-first header, while Guitar
+    // Play can name the notes arriving at the fretboard.
     this.unsubs.push(
       watch(
         () => this.store.state.mode,
+        () => this.applyChordOverlayVisibility(),
+      ),
+      watch(
+        () => this.store.effectiveVisualizationMode,
         () => this.applyChordOverlayVisibility(),
       ),
     )
@@ -1595,11 +1598,12 @@ export class App {
     }
   }
 
-  // Effective visibility = user's saved preference AND current mode supports it.
-  // Play mode is excluded — the chord readout is a "what am I playing?" cue,
-  // not a passive playback annotation.
+  // Effective visibility = user's saved preference AND current surface
+  // supports it. Guitar Play uses the readout as part of its fretboard guide;
+  // Piano Play remains transport-first and keeps it hidden.
   private applyChordOverlayVisibility(): void {
-    const allowedHere = this.store.state.mode !== 'play'
+    const allowedHere =
+      this.store.state.mode !== 'play' || this.store.effectiveVisualizationMode === 'guitar'
     this.chordOverlay.setVisible(this.chordOverlayOn && allowedHere)
   }
 
