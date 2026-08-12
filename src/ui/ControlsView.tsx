@@ -1,8 +1,10 @@
-import { createEffect, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
+import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
+import { pitchToNoteName } from '../core/midi/types'
 import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
 import type { MidiDeviceStatus } from '../midi/MidiInputManager'
+import type { SurfaceActiveVoice } from '../renderer/VisualizationSurface'
 import type { AppMode } from '../store/state'
 import { FloatingHud } from './FloatingHud'
 import { icons } from './icons'
@@ -105,6 +107,8 @@ export interface KeyHintProps {
   onClose: () => void
   onReopen: () => void
   mobileCoachmarkVisible: () => boolean
+  guitarActiveVoices: () => readonly SurfaceActiveVoice[]
+  guitarChordName: () => string
 }
 
 // ── View components ──────────────────────────────────────────────────────
@@ -606,6 +610,31 @@ export function KeyHintView(props: KeyHintProps) {
   const [guitarSection, setGuitarSection] = createSignal<'position' | 'tune' | 'chord' | 'tips'>(
     'position',
   )
+  const positionedVoices = () =>
+    props
+      .guitarActiveVoices()
+      .filter(
+        (voice): voice is SurfaceActiveVoice & { string: number; fret: number } =>
+          voice.string !== undefined && voice.fret !== undefined,
+      )
+  const activeFrets = () => positionedVoices().map((voice) => voice.fret)
+  const guideFretStart = (): number => {
+    const fretted = activeFrets().filter((fret) => fret > 0)
+    if (fretted.length === 0) return 0
+    // GuitarSurface auto-follows the first active positioned voice. Anchor the
+    // guide to the same voice so its miniature neck and the main neck never
+    // present competing fret windows for wide voicings.
+    return Math.max(0, Math.min(20, fretted[0]! - 2))
+  }
+  const guideFretLabels = () =>
+    Array.from({ length: 4 }, (_, index) => guideFretStart() + index + 1)
+  const positionDotStyle = (voice: SurfaceActiveVoice & { string: number; fret: number }) => ({
+    '--gh-dot-string-pos': `${12 + voice.string * 15.2}%`,
+    '--gh-dot-fret-pos': `${
+      voice.fret === 0 ? 3 : Math.max(10, Math.min(90, (voice.fret - guideFretStart()) * 20 - 10))
+    }%`,
+    '--gh-dot-color': `#${voice.color.toString(16).padStart(6, '0')}`,
+  })
 
   const guitarGuideTab = (
     section: 'position' | 'tune' | 'chord' | 'tips',
@@ -787,16 +816,30 @@ export function KeyHintView(props: KeyHintProps) {
                       <span class="gh-string gh-string--6" />
                       <span class="gh-marker gh-marker--3" />
                       <span class="gh-marker gh-marker--5" />
-                      <span class="gh-touch-dot" />
+                      <For each={positionedVoices()}>
+                        {(voice) => <span class="gh-touch-dot" style={positionDotStyle(voice)} />}
+                      </For>
                     </div>
                     <span class="gh-fret-labels">
-                      <span>3</span>
-                      <span>5</span>
-                      <span>7</span>
-                      <span>9</span>
+                      <For each={guideFretLabels()}>{(fret) => <span>{fret}</span>}</For>
                     </span>
                   </div>
-                  <span class="gh-panel-copy">{t('guitarGuide.tap')}</span>
+                  <Show
+                    when={positionedVoices().length > 0}
+                    fallback={<span class="gh-panel-copy">{t('guitarGuide.tap')}</span>}
+                  >
+                    <span class="gh-live-summary" aria-live="polite">
+                      <span class="gh-live-eyebrow">{t('guitarGuide.nowPlaying')}</span>
+                      <strong>
+                        {positionedVoices()
+                          .map(
+                            (voice) =>
+                              `${pitchToNoteName(voice.pitch)} · ${t('guitarGuide.stringShort')}${6 - voice.string} ${t('guitarGuide.fretShort')}${voice.fret}`,
+                          )
+                          .join('  ')}
+                      </strong>
+                    </span>
+                  </Show>
                 </div>
               </Match>
               <Match when={guitarSection() === 'tune'}>
@@ -818,10 +861,28 @@ export function KeyHintView(props: KeyHintProps) {
                 </div>
               </Match>
               <Match when={guitarSection() === 'chord'}>
-                <div class="gh-detail">
+                <div class="gh-detail gh-detail--chord">
                   <span class="gh-detail-icon" aria-hidden="true" innerHTML={icons.chord(24)} />
-                  <strong>{t('guitarGuide.chord')}</strong>
-                  <span>{t('guitarGuide.chordHint')}</span>
+                  <Show
+                    when={props.guitarChordName()}
+                    fallback={
+                      <>
+                        <strong>{t('guitarGuide.chord')}</strong>
+                        <span>{t('guitarGuide.chordHint')}</span>
+                      </>
+                    }
+                  >
+                    <span class="gh-live-eyebrow">{t('guitarGuide.nowPlaying')}</span>
+                    <strong class="gh-live-chord" aria-live="polite">
+                      {props.guitarChordName()}
+                    </strong>
+                    <span class="gh-live-notes">
+                      {props
+                        .guitarActiveVoices()
+                        .map((voice) => pitchToNoteName(voice.pitch))
+                        .join(' · ')}
+                    </span>
+                  </Show>
                 </div>
               </Match>
               <Match when={guitarSection() === 'tips'}>

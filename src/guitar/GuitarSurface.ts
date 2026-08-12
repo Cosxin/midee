@@ -16,6 +16,7 @@ import type { RenderLayer } from '../renderer/RenderLayer'
 import { darkTheme, getTrackColor, type Theme } from '../renderer/theme'
 import type {
   LiveVoiceSource,
+  SurfaceActiveVoice,
   SurfaceHit,
   VisualizationFrameSource,
   VisualizationHitId,
@@ -304,6 +305,7 @@ interface PointerGesture {
 /** Pixi guitar visualization; app-level selection and audio routing are intentionally external. */
 export class GuitarSurface implements VisualizationSurface {
   readonly activeKeys = createEventSignal<ReadonlyMap<VisualizationHitId, number>>(new Map())
+  readonly activeVoices = createEventSignal<readonly SurfaceActiveVoice[]>([])
   readonly surfaceHits: EventSignal<SurfaceHit | null> = createEventSignal<SurfaceHit | null>(null)
 
   private app!: Application
@@ -318,6 +320,7 @@ export class GuitarSurface implements VisualizationSurface {
   private midi: MidiFile | null = null
   private schedule: GuitarSchedule = indexGuitarNotes([])
   private currentWindow: GuitarScheduleWindow = { active: [], upcoming: [], inspected: 0 }
+  private activeVoiceSignature = ''
   private liveStore: LiveNoteStore | null = null
   private loopStore: LiveNoteStore | null = null
   private liveStoreUnsub: (() => void) | null = null
@@ -665,14 +668,27 @@ export class GuitarSurface implements VisualizationSurface {
     this.drawFretboard(g)
 
     const colors = new Map<number, number>()
+    const activeVoices: SurfaceActiveVoice[] = []
     let unsupportedRow = 0
     for (const voice of active) {
       const color = this.colorForVoice(voice)
       colors.set(voice.pitch, color)
+      activeVoices.push({
+        pitch: voice.pitch,
+        color,
+        ...(voice.position ? { string: voice.position.string, fret: voice.position.fret } : {}),
+      })
       if (voice.position) this.drawActivePosition(g, voice.position, color)
       else this.drawUnsupported(g, voice, color, unsupportedRow++)
     }
     this.drawPracticeHints(g, active)
+    const activeVoiceSignature = activeVoices
+      .map((voice) => `${voice.pitch}:${voice.string ?? '-'}:${voice.fret ?? '-'}:${voice.color}`)
+      .join('|')
+    if (activeVoiceSignature !== this.activeVoiceSignature) {
+      this.activeVoiceSignature = activeVoiceSignature
+      this.activeVoices.set(activeVoices)
+    }
     this.activeKeys.set(colors)
     this.accessibilityGrid.updateGeometry(this.layout, this.panX)
   }
