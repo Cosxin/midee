@@ -82,7 +82,7 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'customize.theme': 'Motyw',
   'customize.particles': 'Cząsteczki',
   'customize.chord': 'Odczyt akordów',
-  'customize.chord.sub': 'Nazywa to, co brzmi · tryb na żywo',
+  'customize.chord.sub': 'Nazywa to, co brzmi',
   'customize.language': 'Język',
   'feedback.menu': 'Podziel się z nami swoim feedbackiem oraz zaproponuj funkcję',
   'feedback.postSession': 'Chcesz, żeby działało inaczej? Napisz nam',

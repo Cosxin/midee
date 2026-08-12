@@ -80,7 +80,7 @@ const ptBR: Messages = {
   'customize.theme': 'Tema',
   'customize.particles': 'Partículas',
   'customize.chord': 'Leitura de acordes',
-  'customize.chord.sub': 'Nomeia o que está soando · modo ao vivo',
+  'customize.chord.sub': 'Nomeia o que está soando',
   'customize.language': 'Idioma',
   'feedback.menu': 'Feedback e sugestões',
   'feedback.postSession': 'Quer que funcione diferente? Conte pra gente',

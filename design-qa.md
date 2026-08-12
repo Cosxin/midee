@@ -6,20 +6,26 @@
 - Rendered implementation: `http://127.0.0.1:5173/`
 - Desktop implementation: `/private/tmp/midee-guitar-ui-final-desktop-v7.png`
 - Desktop active chord: `/private/tmp/midee-guitar-ui-chord-desktop-final.png`
+- Desktop MIDI Play with guide: `/private/tmp/midee-guitar-play-guide-desktop-final-v2.png`
 - Mobile compact guide: `/private/tmp/midee-guitar-ui-final-mobile-v4.png`
 - Mobile Chord panel: `/private/tmp/midee-guitar-ui-final-mobile-chord-v4.png`
+- Mobile MIDI Play compact guide: `/private/tmp/midee-guitar-play-guide-mobile-final.png`
+- Mobile MIDI Play Position sheet: `/private/tmp/midee-guitar-play-guide-mobile-open-final.png`
+- Mobile MIDI Play Chord sheet: `/private/tmp/midee-guitar-play-guide-mobile-chord-final.png`
 - Equal-size source/implementation comparison: `/private/tmp/midee-guitar-ui-source-comparison-final-v3.png`
+- Equal-size source/MIDI Play comparison: `/private/tmp/midee-guitar-play-source-comparison-final-v2.png`
 - Generated production texture: `public/textures/guitar-fretboard-rosewood.webp`
 
 ## Normalization and State
 
-- Source and implementation were compared side by side at 1202 x 838.
+- Original source pixels: 1502 x 1047. The source was center-cropped and normalized to 1202 x 838; the browser implementation was captured at 1202 x 838 CSS pixels, 1202 x 838 output pixels, and device scale 1 for an equal-size comparison.
 - Desktop state: 1202 x 838 CSS viewport at device scale 1, dark theme, Live mode, Guitar view, Position guide open, with both empty and active chord states checked.
-- Mobile state: 390 x 844 CSS viewport at device scale 1, dark theme, Live mode, Guitar view, with the compact guide and open Chord sheet checked.
+- Desktop MIDI state: 1202 x 838 CSS viewport at device scale 1, dark theme, Play mode, Guitar view, Chopin sample loaded, Position guide open, active notes and chord checked.
+- Mobile state: 390 x 844 CSS viewport at device scale 1, dark theme, Live and Play modes, Guitar view, with the compact guide and open Position/Chord sheets checked.
 
 ## Full-View Comparison Evidence
 
-The final combined image shows the selected guitar composition rather than the prior piano-derived page: one compact command header, a bounded luthier guide rail, six falling-note lanes, a clear strike line, a lower-stage horizontal rosewood neck, and warm amber-on-black tokens. The neck now ends above the viewport edge instead of behaving like an endless piano roll. The implementation retains the working product's View, Sound, MIDI, record, loop, volume, zoom, and metronome controls without adding a second desktop toolbar.
+The final combined images show the selected guitar composition rather than the prior piano-derived page in both Live and MIDI Play: one compact command header, a bounded luthier guide rail, six falling-note lanes, a clear strike line, a lower-stage horizontal rosewood neck, and warm amber-on-black tokens. The neck now ends above the viewport edge instead of behaving like an endless piano roll. Live retains its musical controls in the command header; Play uses a slim transport rail directly below it without covering the guide or strings.
 
 ## Focused Evidence
 
@@ -27,6 +33,7 @@ The final combined image shows the selected guitar composition rather than the p
 - Guide rail: guitar-specific miniature neck, E-A-D-G-B-E tuning, fret labels 3/5/7/9, Position/Tune/Chord/Tips navigation, and active amber edge.
 - Play surface: lower bounded rosewood neck with metallic frets, pearl position markers, bronze wound strings, steel treble strings, guitar string labels, and a 54/46 runway-to-neck split.
 - Active state: the `C♯` readout occupied x=409.68..484.54 while the embedded HUD started at x=504.63, so the chord and controls did not overlap.
+- MIDI Play: the guide is x=7..161, transport is x=175..1188 and y=80..126, and the resized guitar surface begins at x=161. The active chord readout remains visible in the command header.
 - Mobile: the collapsed guide is 374 x 44. The open Chord sheet is x=8, y=580, width=374, height=256, bottom=836. Its content has no internal horizontal or vertical overflow.
 
 ## Findings
@@ -61,17 +68,26 @@ The final combined image shows the selected guitar composition rather than the p
 - Fixed by integrating live controls into the command header at 1180px+, compressing the redundant desktop actions, using icon-only MIDI, binding the desktop canvas to a lower-stage height, shortening the guide rail, and adding the miniature neck's fret labels.
 - Post-fix desktop bounds: strip x=14..1188 and y=12..72; HUD x=504.63..854 and y=15..69; canvas/accessibility grid x=161..1202 and y=0..774; guide x=7..161 and y=76.4..702.4.
 
+### Iteration 4 - shared Play guide and transport polish
+
+- P1: the guitar guide was gated to Live mode, so a loaded MIDI could animate a guitar neck without exposing Position, Tune, Chord, or Tips.
+- P2: restoring the guide in Play initially competed with the full floating transport and dense file actions.
+- P2: the phone Play header repeated the Learn action already present in the mode switch and retained desktop-only selectors, increasing horizontal pressure.
+- Fixed by making guide visibility depend on the Guitar instrument context in both Live and loaded MIDI Play, keeping the guide stable while the playback HUD idles, preserving guitar chord readout in Play, placing transport in a 46px desktop rail, and reducing mobile Play to its primary icon actions.
+- Post-fix Play bounds: desktop guide x=7..161 and y=76..702; desktop transport x=175..1188 and y=80..126; mobile compact guide x=8..382 and y=792..836; mobile Position sheet x=8..382 and y=557.5..836; mobile Chord sheet x=8..382 and y=580..836. The mobile document remains 390px wide.
+
 ## Verification
 
 - `npm run check`: passed, 55 files and 685/685 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
 - `npx vite build`: passed. Existing chunk-size warnings remain for the Pixi and main bundles.
 - `git diff --check` and `git diff --cached --check`: passed.
-- Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live mode, Position/Chord guide states, active chord, responsive bounds, overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
+- Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live and loaded MIDI Play modes, playback, guide open/close, Position/Chord tabs, active chord, responsive bounds, document overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
 
 ## Implementation Checklist
 
 - [x] One command header at the selected desktop viewport.
 - [x] Guitar guide is instrument-specific and interactive.
+- [x] Guitar guide remains available in both Live and loaded MIDI Play.
 - [x] Desktop guide does not cover note lanes or fretboard cells.
 - [x] Pixi surface and accessibility grid resize with the guide rail and bounded stage.
 - [x] Persistent controls and active chord do not overlap.
