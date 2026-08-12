@@ -4266,158 +4266,175 @@ body.visualization-guitar #key-hint {
   content: "";
 }
 
-.gh-neck {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gh-position-map {
-  display: contents;
-}
-
-.gh-fret-labels {
-  display: none;
-}
-
-.gh-tuning-head {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.gh-tuning-head > span:first-child {
-  color: rgba(255, 242, 226, 0.62);
-  font-size: 8px;
-  font-weight: 650;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.gh-tuning-notes {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  color: #f1c792;
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-}
-
-.gh-tuning-notes span {
-  display: inline-flex;
-  width: 13px;
-  height: 13px;
-  align-items: center;
-  justify-content: center;
-  background: rgba(236, 178, 112, 0.08);
-  border: 1px solid rgba(236, 178, 112, 0.12);
-  border-radius: 50%;
-}
-
-.gh-fretboard {
-  position: relative;
-  height: 58px;
-  overflow: hidden;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.018) 0,
-      rgba(255, 255, 255, 0.018) 1px,
-      transparent 1px,
-      transparent 4px
-    ),
-    linear-gradient(90deg, #2b170f, #5b3520 48%, #321b12);
-  border: 1px solid rgba(242, 197, 143, 0.18);
-  border-radius: 9px;
-  box-shadow:
-    inset 0 0 20px rgba(0, 0, 0, 0.34),
-    0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.gh-fret {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--gh-fret-pos);
-  width: 2px;
-  background: linear-gradient(90deg, rgba(45, 31, 24, 0.72), rgba(239, 218, 193, 0.72));
-  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.48);
-}
-
-.gh-string {
-  position: absolute;
-  right: 0;
-  left: 0;
-  height: var(--gh-string-width, 1px);
-  background: linear-gradient(180deg, #fff8e7, #96765a);
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.58);
-  transform: translateY(-50%);
-}
-
-.gh-string--1 {
-  top: 12%;
-  --gh-string-width: 2.2px;
-}
-.gh-string--2 {
-  top: 27%;
-  --gh-string-width: 1.9px;
-}
-.gh-string--3 {
-  top: 42%;
-  --gh-string-width: 1.6px;
-}
-.gh-string--4 {
-  top: 58%;
-  --gh-string-width: 1.3px;
-}
-.gh-string--5 {
-  top: 73%;
-  --gh-string-width: 1px;
-}
-.gh-string--6 {
-  top: 88%;
-  --gh-string-width: 0.8px;
-}
-
-.gh-marker {
-  position: absolute;
-  top: 50%;
-  left: var(--gh-marker-pos);
-  width: 5px;
-  height: 5px;
-  background: rgba(255, 237, 213, 0.34);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.gh-touch-dot {
-  position: absolute;
-  top: var(--gh-dot-string-pos, 27%);
-  left: var(--gh-dot-fret-pos, 70%);
-  width: 12px;
-  height: 12px;
-  background: var(--gh-dot-color, #f3a65d);
-  border: 2px solid rgba(255, 250, 242, 0.9);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(243, 166, 93, 0.14);
-  transform: translate(-50%, -50%);
-  transition:
-    top 0.16s var(--ease-out),
-    left 0.16s var(--ease-out),
-    background 0.16s var(--ease-out);
-}
-
-.gh-live-summary {
+.gh-position-inspector {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  gap: 8px;
+}
+
+.gh-position-hero {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(238, 159, 79, 0.16), transparent 56%),
+    rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(241, 194, 139, 0.1);
+  border-radius: 10px;
+}
+
+.gh-position-current,
+.gh-visible-range {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.gh-position-current {
   gap: 3px;
-  text-align: center;
+}
+
+.gh-position-current strong {
+  overflow: hidden;
+  color: #ffc06f;
+  font: 400 24px / 1 var(--font-display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-visible-range {
+  align-items: flex-end;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 237, 213, 0.1);
+}
+
+.gh-visible-range > span {
+  color: rgba(255, 242, 226, 0.48);
+  font-size: 6.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gh-visible-range strong {
+  color: #f1c792;
+  font: 650 11px / 1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-position-list {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.gh-position-row {
+  display: grid;
+  min-width: 0;
+  min-height: 36px;
+  grid-template-columns: 10px minmax(26px, auto) minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  color: rgba(255, 244, 232, 0.72);
+  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(255, 237, 213, 0.07);
+  border-radius: 8px;
+  transition:
+    background 0.16s var(--ease-out),
+    border-color 0.16s var(--ease-out);
+}
+
+.gh-position-row:not(:has(.gh-position-outside)) {
+  grid-template-columns: 10px minmax(26px, auto) minmax(0, 1fr);
+}
+
+.gh-position-row.is-outside {
+  background: rgba(255, 255, 255, 0.018);
+  border-style: dashed;
+}
+
+.gh-position-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--gh-dot-color, #f3a65d);
+  border: 1px solid rgba(255, 250, 242, 0.84);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gh-dot-color, #f3a65d) 16%, transparent);
+}
+
+.gh-position-row > strong {
+  color: #fff5e8;
+  font: 650 10px / 1 var(--font-mono);
+}
+
+.gh-position-coordinates {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.gh-position-coordinates > span {
+  min-width: 0;
+  padding: 3px 4px;
+  overflow: hidden;
+  color: rgba(255, 239, 219, 0.62);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 4px;
+  font: 650 7.5px / 1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-position-outside {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: #d8a66f;
+  font-size: 9px;
+}
+
+.gh-position-empty {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: rgba(255, 244, 232, 0.58);
+  font-size: 9px;
+  line-height: 1.35;
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px dashed rgba(255, 237, 213, 0.09);
+  border-radius: 8px;
+}
+
+.gh-position-empty-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  background: #d8a66f;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(216, 166, 111, 0.1);
+}
+
+.gh-position-context {
+  padding-left: 8px;
+  color: rgba(255, 244, 232, 0.44);
+  border-left: 1px solid rgba(239, 159, 79, 0.42);
+  font-size: 7.5px;
+  line-height: 1.35;
 }
 
 .gh-live-eyebrow {
@@ -4428,7 +4445,6 @@ body.visualization-guitar #key-hint {
   text-transform: uppercase;
 }
 
-.gh-live-summary strong,
 .gh-live-notes {
   overflow: hidden;
   color: #fff5e8;
@@ -4517,10 +4533,6 @@ body.visualization-guitar #key-hint {
     align-items: center;
     gap: 9px;
     padding: 8px;
-  }
-
-  .kh--guitar .gh-fretboard {
-    height: 40px;
   }
 
   .kh--guitar .gh-actions,
@@ -7101,96 +7113,29 @@ body.canvas-hidden #kbd-resizer {
     grid-row: 6;
   }
 
-  .kh--guitar .gh-neck {
-    gap: 9px;
-  }
-
-  .kh--guitar .gh-tuning-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .kh--guitar .gh-fretboard {
-    width: 82px;
-    height: 174px;
-    margin: 0;
-  }
-
-  .kh--guitar .gh-position-map {
-    display: flex;
-    align-self: center;
-    align-items: stretch;
+  .kh--guitar .gh-position-inspector {
     gap: 7px;
-    margin: 2px auto;
   }
 
-  .kh--guitar .gh-fret-labels {
-    position: relative;
-    display: block;
-    width: 12px;
-    height: 174px;
-    flex: 0 0 12px;
-    color: #ef9f4f;
-    font: 650 9px / 1 var(--font-mono);
+  .kh--guitar .gh-position-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
   }
 
-  .kh--guitar .gh-fret-labels span {
-    position: absolute;
-    left: 0;
-    top: var(--gh-fret-label-pos);
-    transform: translateY(-50%);
+  .kh--guitar .gh-visible-range {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-top: 6px;
+    padding-left: 0;
+    border-top: 1px solid rgba(255, 237, 213, 0.08);
+    border-left: 0;
   }
 
-  .kh--guitar .gh-fret {
-    right: 0;
-    left: 0;
-    width: auto;
-    height: 2px;
-  }
-  .kh--guitar .gh-fret {
-    top: var(--gh-fret-pos);
-  }
-
-  .kh--guitar .gh-string {
-    top: 0;
-    bottom: 0;
-    width: var(--gh-string-width, 1px);
-    height: auto;
-    transform: translateX(-50%);
-  }
-  .kh--guitar .gh-string--1 {
-    left: 12%;
-  }
-  .kh--guitar .gh-string--2 {
-    left: 27%;
-  }
-  .kh--guitar .gh-string--3 {
-    left: 42%;
-  }
-  .kh--guitar .gh-string--4 {
-    left: 58%;
-  }
-  .kh--guitar .gh-string--5 {
-    left: 73%;
-  }
-  .kh--guitar .gh-string--6 {
-    left: 88%;
-  }
-
-  .kh--guitar .gh-marker {
-    top: var(--gh-marker-pos);
-    left: 50%;
-  }
-  .kh--guitar .gh-touch-dot {
-    top: var(--gh-dot-fret-pos, 70%);
-    left: var(--gh-dot-string-pos, 42%);
-  }
-
-  .kh--guitar .gh-panel-copy {
-    display: block;
-    font-size: 9px;
-    line-height: 1.35;
-    text-align: center;
+  .kh--guitar .gh-position-row {
+    grid-template-columns: 8px minmax(24px, auto) minmax(0, 1fr) 12px;
+    gap: 5px;
+    padding-inline: 5px;
   }
 
   .kh--guitar .gh-detail {
@@ -7593,8 +7538,26 @@ body.canvas-hidden #kbd-resizer {
     border-radius: 12px;
   }
 
-  .kh--guitar .gh-fretboard {
-    height: 74px;
+  .kh--guitar .gh-position-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kh--guitar .gh-position-hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .kh--guitar .gh-visible-range {
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    padding-top: 0;
+    padding-left: 10px;
+    border-top: 0;
+    border-left: 1px solid rgba(255, 237, 213, 0.1);
+  }
+
+  .kh--guitar .gh-position-row {
+    min-height: 44px;
   }
 
   .kh--guitar .gh-detail {
