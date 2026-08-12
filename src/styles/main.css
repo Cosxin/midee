@@ -4415,15 +4415,48 @@ body.visualization-guitar #key-hint {
 
 .gh-touch-dot {
   position: absolute;
-  top: 27%;
-  left: 70%;
+  top: var(--gh-dot-string-pos, 27%);
+  left: var(--gh-dot-fret-pos, 70%);
   width: 12px;
   height: 12px;
-  background: #f3a65d;
+  background: var(--gh-dot-color, #f3a65d);
   border: 2px solid rgba(255, 250, 242, 0.9);
   border-radius: 50%;
   box-shadow: 0 0 0 4px rgba(243, 166, 93, 0.14);
   transform: translate(-50%, -50%);
+  transition:
+    top 0.16s var(--ease-out),
+    left 0.16s var(--ease-out),
+    background 0.16s var(--ease-out);
+}
+
+.gh-live-summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+}
+
+.gh-live-eyebrow {
+  color: #d8a66f;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.gh-live-summary strong,
+.gh-live-notes {
+  overflow: hidden;
+  color: #fff5e8;
+  font: 650 8px / 1.35 var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+.gh-live-chord {
+  color: #ffc06f !important;
+  font: 400 30px / 1 var(--font-display) !important;
 }
 
 .gh-actions {
@@ -7192,8 +7225,8 @@ body.canvas-hidden #kbd-resizer {
     left: 50%;
   }
   .kh--guitar .gh-touch-dot {
-    top: 70%;
-    left: 42%;
+    top: var(--gh-dot-fret-pos, 70%);
+    left: var(--gh-dot-string-pos, 42%);
   }
 
   .kh--guitar .gh-panel-copy {

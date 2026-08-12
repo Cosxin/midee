@@ -1,11 +1,13 @@
 import { createSignal } from 'solid-js'
 import { createStore, type SetStoreFunction } from 'solid-js/store'
 import { render } from 'solid-js/web'
+import { detectChord } from '../core/music/ChordDetector'
 import type { AppServices } from '../core/services'
 import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
 import type { MidiDeviceStatus } from '../midi/MidiInputManager'
+import type { SurfaceActiveVoice } from '../renderer/VisualizationSurface'
 import type { AppMode } from '../store/state'
 import { watch } from '../store/watch'
 import { trackEvent, trackEventSettled } from '../telemetry'
@@ -171,6 +173,13 @@ export class Controls {
       store.effectiveVisualizationMode === 'guitar' &&
         opts.services.renderer.activeKeys.value.size > 0,
     )
+    const [guitarActiveVoices, setGuitarActiveVoices] = createSignal<readonly SurfaceActiveVoice[]>(
+      opts.services.renderer.activeVoices?.value ?? [],
+    )
+    const guitarChordName = (): string => {
+      const reading = detectChord(guitarActiveVoices().map((voice) => voice.pitch))
+      return reading.name ?? reading.pitchClasses.join('·')
+    }
     // Session-only: the HUD always starts open on load (not persisted).
     const [hudClosed, setHudClosed] = createSignal(false)
     const [octave, setOctave] = createSignal(4)
@@ -454,6 +463,8 @@ export class Controls {
             mobileCoachmarkVisible={() =>
               visualizationMode() === 'guitar' && !guitarKeyHintExpanded() && !guitarGuideSeen()
             }
+            guitarActiveVoices={guitarActiveVoices}
+            guitarChordName={guitarChordName}
           />
         </>
       ),
@@ -498,6 +509,8 @@ export class Controls {
         },
       ),
       opts.services.renderer.activeKeys.subscribe((keys) => setGuitarHasActiveNotes(keys.size > 0)),
+      opts.services.renderer.activeVoices?.subscribe((voices) => setGuitarActiveVoices(voices)) ??
+        (() => undefined),
       watch(
         () => store.state.visualizationForced,
         (forced) => setVisualizationDisabled(forced !== null),

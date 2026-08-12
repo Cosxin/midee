@@ -7,11 +7,14 @@
 - Desktop implementation: `/private/tmp/midee-guitar-ui-final-desktop-v7.png`
 - Desktop active chord: `/private/tmp/midee-guitar-ui-chord-desktop-final.png`
 - Desktop MIDI Play with guide: `/private/tmp/midee-guitar-play-guide-desktop-final-v2.png`
+- Desktop playback-follow Position guide: `/private/tmp/midee-guitar-guide-follow-position-final.png`
+- Desktop playback-follow Chord guide: `/private/tmp/midee-guitar-guide-follow-chord-final.png`
 - Mobile compact guide: `/private/tmp/midee-guitar-ui-final-mobile-v4.png`
 - Mobile Chord panel: `/private/tmp/midee-guitar-ui-final-mobile-chord-v4.png`
 - Mobile MIDI Play compact guide: `/private/tmp/midee-guitar-play-guide-mobile-final.png`
 - Mobile MIDI Play Position sheet: `/private/tmp/midee-guitar-play-guide-mobile-open-final.png`
 - Mobile MIDI Play Chord sheet: `/private/tmp/midee-guitar-play-guide-mobile-chord-final.png`
+- Mobile playback-follow Position sheet: `/private/tmp/midee-guitar-guide-follow-mobile-final.png`
 - Equal-size source/implementation comparison: `/private/tmp/midee-guitar-ui-source-comparison-final-v3.png`
 - Equal-size source/MIDI Play comparison: `/private/tmp/midee-guitar-play-source-comparison-final-v2.png`
 - Generated production texture: `public/textures/guitar-fretboard-rosewood.webp`
@@ -34,6 +37,7 @@ The final combined images show the selected guitar composition rather than the p
 - Play surface: lower bounded rosewood neck with metallic frets, pearl position markers, bronze wound strings, steel treble strings, guitar string labels, and a 54/46 runway-to-neck split.
 - Active state: the `C♯` readout occupied x=409.68..484.54 while the embedded HUD started at x=504.63, so the chord and controls did not overlap.
 - MIDI Play: the guide is x=7..161, transport is x=175..1188 and y=80..126, and the resized guitar surface begins at x=161. The active chord readout remains visible in the command header.
+- Playback-follow: the miniature neck consumes the same active voice assignments as the guitar renderer. During the sample it changed from `C5 · S1 F8 / F#3 · S4 F4 / D#4 · S2 F4` with fret window 4–7 to `A#5 · S1 F18 / F2 · S6 F1` with fret window 17–20; the Chord panel independently changed to the current chord and note names.
 - Mobile: the collapsed guide is 374 x 44. The open Chord sheet is x=8, y=580, width=374, height=256, bottom=836. Its content has no internal horizontal or vertical overflow.
 
 ## Findings
@@ -76,18 +80,25 @@ The final combined images show the selected guitar composition rather than the p
 - Fixed by making guide visibility depend on the Guitar instrument context in both Live and loaded MIDI Play, keeping the guide stable while the playback HUD idles, preserving guitar chord readout in Play, placing transport in a 46px desktop rail, and reducing mobile Play to its primary icon actions.
 - Post-fix Play bounds: desktop guide x=7..161 and y=76..702; desktop transport x=175..1188 and y=80..126; mobile compact guide x=8..382 and y=792..836; mobile Position sheet x=8..382 and y=557.5..836; mobile Chord sheet x=8..382 and y=580..836. The mobile document remains 390px wide.
 
+### Iteration 5 - live playback-follow content
+
+- P1: the guide stayed visually static while MIDI playback changed notes, strings, frets, and chords.
+- Fixed by publishing the renderer's exact active guitar voice assignments through the stable surface router, then driving the miniature neck, fret window, string/fret summary, and Chord panel from that stream. The guide no longer recomputes a competing fingering.
+- Post-fix evidence: seek and playback changed the guide DOM, marker positions, fret labels, chord name, and note list; desktop remained 1202px wide and the open mobile sheet remained within x=8..382 and bottom=836 on a 390 x 844 viewport.
+
 ## Verification
 
-- `npm run check`: passed, 55 files and 685/685 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
+- `npm run check`: passed, 55 files and 686/686 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
 - `npx vite build`: passed. Existing chunk-size warnings remain for the Pixi and main bundles.
 - `git diff --check` and `git diff --cached --check`: passed.
-- Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live and loaded MIDI Play modes, playback, guide open/close, Position/Chord tabs, active chord, responsive bounds, document overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
+- Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live and loaded MIDI Play modes, playback, seek, guide open/close, Position/Chord tabs, changing exact string/fret assignments, active chord, responsive bounds, document overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
 
 ## Implementation Checklist
 
 - [x] One command header at the selected desktop viewport.
 - [x] Guitar guide is instrument-specific and interactive.
 - [x] Guitar guide remains available in both Live and loaded MIDI Play.
+- [x] Position and Chord content follow the sounding playback voices.
 - [x] Desktop guide does not cover note lanes or fretboard cells.
 - [x] Pixi surface and accessibility grid resize with the guide rail and bounded stage.
 - [x] Persistent controls and active chord do not overlap.

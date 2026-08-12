@@ -5,6 +5,7 @@ import type { RenderLayer } from './RenderLayer'
 import type { Theme } from './theme'
 import type {
   LiveVoiceSource,
+  SurfaceActiveVoice,
   SurfaceHit,
   VisualizationFrameSource,
   VisualizationHitId,
@@ -120,6 +121,8 @@ export class SurfaceRouter implements VisualizationSurface {
     new Map(),
   )
   private activeKeysUnsub: (() => void) | null = null
+  private readonly _activeVoices = createEventSignal<readonly SurfaceActiveVoice[]>([])
+  private activeVoicesUnsub: (() => void) | null = null
   private readonly _surfaceHits = createEventSignal<SurfaceHit | null>(null)
   private surfaceHitsUnsub: (() => void) | null = null
 
@@ -258,6 +261,12 @@ export class SurfaceRouter implements VisualizationSurface {
     this._activeKeys.set(surface.activeKeys.value)
     this.activeKeysUnsub = surface.activeKeys.subscribe((v) => this._activeKeys.set(v))
 
+    this.activeVoicesUnsub?.()
+    this._activeVoices.set(surface.activeVoices?.value ?? [])
+    this.activeVoicesUnsub = surface.activeVoices
+      ? surface.activeVoices.subscribe((voices) => this._activeVoices.set(voices))
+      : null
+
     this.surfaceHitsUnsub?.()
     this._surfaceHits.set(null)
     this.surfaceHitsUnsub = surface.surfaceHits
@@ -393,6 +402,7 @@ export class SurfaceRouter implements VisualizationSurface {
 
   destroy(): void {
     this.activeKeysUnsub?.()
+    this.activeVoicesUnsub?.()
     this.surfaceHitsUnsub?.()
     this.piano.destroy()
     this.guitar?.destroy()
@@ -402,6 +412,10 @@ export class SurfaceRouter implements VisualizationSurface {
 
   get activeKeys(): VisualizationSurface['activeKeys'] {
     return this._activeKeys
+  }
+
+  get activeVoices(): NonNullable<VisualizationSurface['activeVoices']> {
+    return this._activeVoices
   }
 
   // Unlike the concrete surfaces (where this is optional — only interactive

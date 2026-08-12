@@ -14,6 +14,7 @@ function fakeSurface(
 ): VisualizationSurface & {
   name: string
   emitActiveKeys: (v: ReadonlyMap<number, number>) => void
+  emitActiveVoices: (v: NonNullable<VisualizationSurface['activeVoices']>['value']) => void
   emitHit: (hit: SurfaceHit | null) => void
 } {
   let activeKeysValue: ReadonlyMap<number, number> = new Map()
@@ -48,11 +49,31 @@ function fakeSurface(
     },
   }
 
+  let activeVoicesValue: NonNullable<VisualizationSurface['activeVoices']>['value'] = []
+  const activeVoicesListeners = new Set<
+    (v: NonNullable<VisualizationSurface['activeVoices']>['value']) => void
+  >()
+  const activeVoices: NonNullable<VisualizationSurface['activeVoices']> = {
+    get value() {
+      return activeVoicesValue
+    },
+    set: (v) => {
+      activeVoicesValue = v
+      for (const fn of activeVoicesListeners) fn(v)
+    },
+    subscribe: (fn) => {
+      activeVoicesListeners.add(fn)
+      return () => activeVoicesListeners.delete(fn)
+    },
+  }
+
   return {
     name,
     activeKeys,
+    activeVoices,
     ...(opts.interactive ? { surfaceHits } : {}),
     emitActiveKeys: activeKeys.set,
+    emitActiveVoices: activeVoices.set,
     emitHit: opts.interactive ? surfaceHits.set : () => undefined,
     init: vi.fn(async () => {}),
     attachClock: vi.fn(),
@@ -190,6 +211,25 @@ describe('SurfaceRouter', () => {
 
       guitar.emitActiveKeys(new Map([[43, 4]]))
       expect(router.activeKeys.value).toEqual(new Map([[43, 4]]))
+    })
+
+    it('activeVoices follows the active surface with exact guitar string and fret detail', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const router = new SurfaceRouter(piano, async () => guitar)
+      const guitarVoices = [{ pitch: 64, color: 0xffaa33, string: 5, fret: 0 }]
+
+      piano.emitActiveVoices([{ pitch: 60, color: 0xffffff }])
+      expect(router.activeVoices.value).toEqual([{ pitch: 60, color: 0xffffff }])
+
+      guitar.emitActiveVoices(guitarVoices)
+      expect(router.activeVoices.value).not.toBe(guitarVoices)
+
+      await router.setMode('guitar', 0)
+      expect(router.activeVoices.value).toBe(guitarVoices)
+
+      piano.emitActiveVoices([{ pitch: 62, color: 0xffffff }])
+      expect(router.activeVoices.value).toBe(guitarVoices)
     })
 
     it('surfaceHits stays null while an interactive surface is inactive and starts firing once it becomes active', async () => {

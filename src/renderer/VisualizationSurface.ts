@@ -40,6 +40,16 @@ export interface SurfaceHit {
   fret?: number
 }
 
+/** Current sounding voice exposed to instrument-aware companion UI. Piano
+ * surfaces may omit string/fret; guitar surfaces publish the exact fingering
+ * they are drawing so guides never have to guess a second position. */
+export interface SurfaceActiveVoice {
+  pitch: number
+  color: number
+  string?: number
+  fret?: number
+}
+
 /**
  * Contract an instrument visualization surface must satisfy to be mounted
  * behind `AppServices.renderer`. Concrete piano and guitar renderers satisfy
@@ -72,6 +82,8 @@ export interface VisualizationSurface {
   setLiveNotesVisible(visible: boolean): void
   /** Pitch → color of every voice currently lit, republished on change. */
   readonly activeKeys: EventSignal<ReadonlyMap<VisualizationHitId, number>>
+  /** Optional detailed sounding voices for companion UI such as the guitar guide. */
+  readonly activeVoices?: EventSignal<readonly SurfaceActiveVoice[]>
   /** Interactive surfaces expose note events; passive surfaces may omit it. */
   readonly surfaceHits?: EventSignal<SurfaceHit | null>
 
