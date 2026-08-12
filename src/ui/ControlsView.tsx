@@ -4,7 +4,7 @@ import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
 import type { MidiDeviceStatus } from '../midi/MidiInputManager'
-import type { SurfaceActiveVoice } from '../renderer/VisualizationSurface'
+import type { SurfaceActiveVoice, SurfaceFretboardViewport } from '../renderer/VisualizationSurface'
 import type { AppMode } from '../store/state'
 import { FloatingHud } from './FloatingHud'
 import { icons } from './icons'
@@ -108,6 +108,7 @@ export interface KeyHintProps {
   onReopen: () => void
   mobileCoachmarkVisible: () => boolean
   guitarActiveVoices: () => readonly SurfaceActiveVoice[]
+  guitarFretboardViewport: () => SurfaceFretboardViewport | null
   guitarChordName: () => string
 }
 
@@ -617,22 +618,42 @@ export function KeyHintView(props: KeyHintProps) {
         (voice): voice is SurfaceActiveVoice & { string: number; fret: number } =>
           voice.string !== undefined && voice.fret !== undefined,
       )
-  const activeFrets = () => positionedVoices().map((voice) => voice.fret)
-  const guideFretStart = (): number => {
-    const fretted = activeFrets().filter((fret) => fret > 0)
-    if (fretted.length === 0) return 0
-    // GuitarSurface auto-follows the first active positioned voice. Anchor the
-    // guide to the same voice so its miniature neck and the main neck never
-    // present competing fret windows for wide voicings.
-    return Math.max(0, Math.min(20, fretted[0]! - 2))
+  const guideViewport = (): SurfaceFretboardViewport =>
+    props.guitarFretboardViewport() ?? { startFret: 0, fretSpan: 12 }
+  const visiblePositionedVoices = () => {
+    const viewport = guideViewport()
+    return positionedVoices().filter(
+      (voice) =>
+        voice.fret >= viewport.startFret && voice.fret <= viewport.startFret + viewport.fretSpan,
+    )
   }
-  const guideFretLabels = () =>
-    Array.from({ length: 4 }, (_, index) => guideFretStart() + index + 1)
+  const guideFretLabels = () => {
+    const viewport = guideViewport()
+    const first = Math.max(0, Math.ceil(viewport.startFret))
+    const last = Math.min(24, Math.floor(viewport.startFret + viewport.fretSpan))
+    const labels: number[] = []
+    for (let fret = first; fret <= last; fret++) {
+      if (fret === 0 || [3, 5, 7, 9, 12, 15, 17, 19, 21, 24].includes(fret)) labels.push(fret)
+    }
+    return labels
+  }
+  const guideFretBoundaries = () => {
+    const viewport = guideViewport()
+    const first = Math.max(0, Math.ceil(viewport.startFret))
+    const last = Math.min(24, Math.floor(viewport.startFret + viewport.fretSpan))
+    return Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => first + index)
+  }
+  const fretBoundaryPosition = (fret: number): number => {
+    const viewport = guideViewport()
+    return ((fret - viewport.startFret) / viewport.fretSpan) * 100
+  }
+  const fretPosition = (fret: number): number => {
+    const viewport = guideViewport()
+    return ((fret - viewport.startFret + 0.5) / viewport.fretSpan) * 100
+  }
   const positionDotStyle = (voice: SurfaceActiveVoice & { string: number; fret: number }) => ({
     '--gh-dot-string-pos': `${12 + voice.string * 15.2}%`,
-    '--gh-dot-fret-pos': `${
-      voice.fret === 0 ? 3 : Math.max(10, Math.min(90, (voice.fret - guideFretStart()) * 20 - 10))
-    }%`,
+    '--gh-dot-fret-pos': `${fretPosition(voice.fret)}%`,
     '--gh-dot-color': `#${voice.color.toString(16).padStart(6, '0')}`,
   })
 
@@ -804,24 +825,40 @@ export function KeyHintView(props: KeyHintProps) {
                   </div>
                   <div class="gh-position-map" aria-hidden="true">
                     <div class="gh-fretboard">
-                      <span class="gh-fret gh-fret--1" />
-                      <span class="gh-fret gh-fret--2" />
-                      <span class="gh-fret gh-fret--3" />
-                      <span class="gh-fret gh-fret--4" />
+                      <For each={guideFretBoundaries()}>
+                        {(fret) => (
+                          <span
+                            class="gh-fret"
+                            style={{ '--gh-fret-pos': `${fretBoundaryPosition(fret)}%` }}
+                          />
+                        )}
+                      </For>
                       <span class="gh-string gh-string--1" />
                       <span class="gh-string gh-string--2" />
                       <span class="gh-string gh-string--3" />
                       <span class="gh-string gh-string--4" />
                       <span class="gh-string gh-string--5" />
                       <span class="gh-string gh-string--6" />
-                      <span class="gh-marker gh-marker--3" />
-                      <span class="gh-marker gh-marker--5" />
-                      <For each={positionedVoices()}>
+                      <For each={guideFretLabels().filter((fret) => fret > 0)}>
+                        {(fret) => (
+                          <span
+                            class="gh-marker"
+                            style={{ '--gh-marker-pos': `${fretPosition(fret)}%` }}
+                          />
+                        )}
+                      </For>
+                      <For each={visiblePositionedVoices()}>
                         {(voice) => <span class="gh-touch-dot" style={positionDotStyle(voice)} />}
                       </For>
                     </div>
                     <span class="gh-fret-labels">
-                      <For each={guideFretLabels()}>{(fret) => <span>{fret}</span>}</For>
+                      <For each={guideFretLabels()}>
+                        {(fret) => (
+                          <span style={{ '--gh-fret-label-pos': `${fretPosition(fret)}%` }}>
+                            {fret}
+                          </span>
+                        )}
+                      </For>
                     </span>
                   </div>
                   <Show

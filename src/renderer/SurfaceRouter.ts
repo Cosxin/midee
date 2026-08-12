@@ -6,6 +6,7 @@ import type { Theme } from './theme'
 import type {
   LiveVoiceSource,
   SurfaceActiveVoice,
+  SurfaceFretboardViewport,
   SurfaceHit,
   VisualizationFrameSource,
   VisualizationHitId,
@@ -123,6 +124,8 @@ export class SurfaceRouter implements VisualizationSurface {
   private activeKeysUnsub: (() => void) | null = null
   private readonly _activeVoices = createEventSignal<readonly SurfaceActiveVoice[]>([])
   private activeVoicesUnsub: (() => void) | null = null
+  private readonly _fretboardViewport = createEventSignal<SurfaceFretboardViewport | null>(null)
+  private fretboardViewportUnsub: (() => void) | null = null
   private readonly _surfaceHits = createEventSignal<SurfaceHit | null>(null)
   private surfaceHitsUnsub: (() => void) | null = null
 
@@ -267,6 +270,12 @@ export class SurfaceRouter implements VisualizationSurface {
       ? surface.activeVoices.subscribe((voices) => this._activeVoices.set(voices))
       : null
 
+    this.fretboardViewportUnsub?.()
+    this._fretboardViewport.set(surface.fretboardViewport?.value ?? null)
+    this.fretboardViewportUnsub = surface.fretboardViewport
+      ? surface.fretboardViewport.subscribe((viewport) => this._fretboardViewport.set(viewport))
+      : null
+
     this.surfaceHitsUnsub?.()
     this._surfaceHits.set(null)
     this.surfaceHitsUnsub = surface.surfaceHits
@@ -403,6 +412,7 @@ export class SurfaceRouter implements VisualizationSurface {
   destroy(): void {
     this.activeKeysUnsub?.()
     this.activeVoicesUnsub?.()
+    this.fretboardViewportUnsub?.()
     this.surfaceHitsUnsub?.()
     this.piano.destroy()
     this.guitar?.destroy()
@@ -416,6 +426,10 @@ export class SurfaceRouter implements VisualizationSurface {
 
   get activeVoices(): NonNullable<VisualizationSurface['activeVoices']> {
     return this._activeVoices
+  }
+
+  get fretboardViewport(): NonNullable<VisualizationSurface['fretboardViewport']> {
+    return this._fretboardViewport
   }
 
   // Unlike the concrete surfaces (where this is optional — only interactive

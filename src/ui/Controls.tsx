@@ -7,7 +7,7 @@ import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
 import type { MidiDeviceStatus } from '../midi/MidiInputManager'
-import type { SurfaceActiveVoice } from '../renderer/VisualizationSurface'
+import type { SurfaceActiveVoice, SurfaceFretboardViewport } from '../renderer/VisualizationSurface'
 import type { AppMode } from '../store/state'
 import { watch } from '../store/watch'
 import { trackEvent, trackEventSettled } from '../telemetry'
@@ -176,6 +176,10 @@ export class Controls {
     const [guitarActiveVoices, setGuitarActiveVoices] = createSignal<readonly SurfaceActiveVoice[]>(
       opts.services.renderer.activeVoices?.value ?? [],
     )
+    const [guitarFretboardViewport, setGuitarFretboardViewport] =
+      createSignal<SurfaceFretboardViewport | null>(
+        opts.services.renderer.fretboardViewport?.value ?? null,
+      )
     const guitarChordName = (): string => {
       const reading = detectChord(guitarActiveVoices().map((voice) => voice.pitch))
       return reading.name ?? reading.pitchClasses.join('·')
@@ -464,6 +468,7 @@ export class Controls {
               visualizationMode() === 'guitar' && !guitarKeyHintExpanded() && !guitarGuideSeen()
             }
             guitarActiveVoices={guitarActiveVoices}
+            guitarFretboardViewport={guitarFretboardViewport}
             guitarChordName={guitarChordName}
           />
         </>
@@ -511,6 +516,9 @@ export class Controls {
       opts.services.renderer.activeKeys.subscribe((keys) => setGuitarHasActiveNotes(keys.size > 0)),
       opts.services.renderer.activeVoices?.subscribe((voices) => setGuitarActiveVoices(voices)) ??
         (() => undefined),
+      opts.services.renderer.fretboardViewport?.subscribe((viewport) =>
+        setGuitarFretboardViewport(viewport),
+      ) ?? (() => undefined),
       watch(
         () => store.state.visualizationForced,
         (forced) => setVisualizationDisabled(forced !== null),

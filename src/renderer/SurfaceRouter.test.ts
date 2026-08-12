@@ -15,6 +15,9 @@ function fakeSurface(
   name: string
   emitActiveKeys: (v: ReadonlyMap<number, number>) => void
   emitActiveVoices: (v: NonNullable<VisualizationSurface['activeVoices']>['value']) => void
+  emitFretboardViewport: (
+    v: NonNullable<VisualizationSurface['fretboardViewport']>['value'],
+  ) => void
   emitHit: (hit: SurfaceHit | null) => void
 } {
   let activeKeysValue: ReadonlyMap<number, number> = new Map()
@@ -66,14 +69,33 @@ function fakeSurface(
       return () => activeVoicesListeners.delete(fn)
     },
   }
+  let fretboardViewportValue: NonNullable<VisualizationSurface['fretboardViewport']>['value'] = null
+  const fretboardViewportListeners = new Set<
+    (v: NonNullable<VisualizationSurface['fretboardViewport']>['value']) => void
+  >()
+  const fretboardViewport: NonNullable<VisualizationSurface['fretboardViewport']> = {
+    get value() {
+      return fretboardViewportValue
+    },
+    set: (v) => {
+      fretboardViewportValue = v
+      for (const fn of fretboardViewportListeners) fn(v)
+    },
+    subscribe: (fn) => {
+      fretboardViewportListeners.add(fn)
+      return () => fretboardViewportListeners.delete(fn)
+    },
+  }
 
   return {
     name,
     activeKeys,
     activeVoices,
+    fretboardViewport,
     ...(opts.interactive ? { surfaceHits } : {}),
     emitActiveKeys: activeKeys.set,
     emitActiveVoices: activeVoices.set,
+    emitFretboardViewport: fretboardViewport.set,
     emitHit: opts.interactive ? surfaceHits.set : () => undefined,
     init: vi.fn(async () => {}),
     attachClock: vi.fn(),
@@ -230,6 +252,23 @@ describe('SurfaceRouter', () => {
 
       piano.emitActiveVoices([{ pitch: 62, color: 0xffffff }])
       expect(router.activeVoices.value).toBe(guitarVoices)
+    })
+
+    it('fretboardViewport follows the active surface so companion guides share its pan', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const router = new SurfaceRouter(piano, async () => guitar)
+      const viewport = { startFret: 8.4, fretSpan: 12 }
+
+      expect(router.fretboardViewport.value).toBeNull()
+      guitar.emitFretboardViewport(viewport)
+      expect(router.fretboardViewport.value).toBeNull()
+
+      await router.setMode('guitar', 0)
+      expect(router.fretboardViewport.value).toBe(viewport)
+
+      guitar.emitFretboardViewport({ startFret: 12.2, fretSpan: 12 })
+      expect(router.fretboardViewport.value).toEqual({ startFret: 12.2, fretSpan: 12 })
     })
 
     it('surfaceHits stays null while an interactive surface is inactive and starts firing once it becomes active', async () => {
