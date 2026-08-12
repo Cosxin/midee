@@ -23,7 +23,12 @@ export interface GuitarLayout {
 export function createGuitarLayout(width: number, height: number): GuitarLayout {
   const safeWidth = Math.max(1, width)
   const safeHeight = Math.max(1, height)
-  const highwayHeight = Math.max(132, Math.round(safeHeight * 0.48))
+  // The desktop guitar composition reserves a longer note runway than the
+  // piano-derived split did. The desktop surface itself is a bounded stage,
+  // so a 60/40 split keeps the neck low while preserving 44px string rows.
+  // Phones retain taller rows for touch interaction.
+  const highwayRatio = safeWidth > 640 ? 0.54 : 0.48
+  const highwayHeight = Math.max(132, Math.round(safeHeight * highwayRatio))
   const fretboardTop = Math.min(highwayHeight, Math.max(0, safeHeight - GUITAR_STRING_COUNT * 44))
   const fretboardHeight = safeHeight - fretboardTop
   const stringHeight = Math.max(MIN_FRET_TARGET_PX, fretboardHeight / GUITAR_STRING_COUNT)

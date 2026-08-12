@@ -62,6 +62,7 @@ const es: Messages = {
   'topStrip.midi.blockedPill': 'Activar MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': 'Vista de visualización',
+  'visualization.groupLabel': 'Vista',
   'visualization.piano.label': 'Piano',
   'visualization.piano.aria': 'Mostrar visualización de piano',
   'visualization.guitar.label': 'Guitarra',
@@ -151,12 +152,20 @@ const es: Messages = {
 
   // ── Guía del diapasón (modo live) ──────────────────────────
   'guitarGuide.title': 'Guía del diapasón',
+  'guitarGuide.position': 'Posición',
+  'guitarGuide.tune': 'Afinación',
+  'guitarGuide.chord': 'Acorde',
+  'guitarGuide.tips': 'Consejos',
   'guitarGuide.tuning': 'Afinación estándar · de grave a agudo',
   'guitarGuide.tap': 'Toca o haz clic en cualquier traste',
   'guitarGuide.drag': 'Arrastra lateralmente para explorar',
   'guitarGuide.keys': 'Las flechas mueven · Intro o Espacio toca',
   'guitarGuide.show': 'Mostrar guía del diapasón',
   'guitarGuide.hide': 'Ocultar guía del diapasón',
+  'guitarGuide.chordHint': 'Toca 2 o más notas para ver el acorde arriba.',
+  'guitarGuide.empty': 'Toca un traste, usa MIDI o arrastra para explorar.',
+  'guitarGuide.mobileCoachmark': 'Tu guía de guitarra está aquí',
+  'guitarGuide.mobileLabel': 'Guía de guitarra',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Acorde sonando',
@@ -403,6 +412,7 @@ const es: Messages = {
 
   // ── Instrument menu ─────────────────────────────────────────
   'instrument.title': 'Instrumento',
+  'instrument.groupLabel': 'Sonido',
   'instrument.aria': 'Elegir instrumento',
   'instrument.panelLabel': 'Instrumento',
   'instrument.fallback': 'Piano',

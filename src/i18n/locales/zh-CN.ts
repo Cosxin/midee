@@ -59,6 +59,7 @@ const zhCN: Messages = {
   'topStrip.midi.blockedPill': '启用 MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': '可视化视图',
+  'visualization.groupLabel': '视图',
   'visualization.piano.label': '钢琴',
   'visualization.piano.aria': '显示钢琴可视化',
   'visualization.guitar.label': '吉他',
@@ -185,12 +186,20 @@ const zhCN: Messages = {
   'keyHint.shortcut.metronome': '节拍器',
 
   'guitarGuide.title': '指板指南',
+  'guitarGuide.position': '把位',
+  'guitarGuide.tune': '调弦',
+  'guitarGuide.chord': '和弦',
+  'guitarGuide.tips': '提示',
   'guitarGuide.tuning': '标准调弦 · 从低音到高音',
   'guitarGuide.tap': '轻触或点击任意品位',
   'guitarGuide.drag': '横向拖动以浏览指板',
   'guitarGuide.keys': '方向键移动 · 回车或空格弹奏',
   'guitarGuide.show': '显示指板指南',
   'guitarGuide.hide': '隐藏指板指南',
+  'guitarGuide.chordHint': '同时弹奏至少 2 个音，即可在上方查看和弦。',
+  'guitarGuide.empty': '轻触品位、弹奏 MIDI，或拖动探索。',
+  'guitarGuide.mobileCoachmark': '吉他指南在这里',
+  'guitarGuide.mobileLabel': '吉他指南',
 
   'chord.aria': '当前发声的和弦',
 
@@ -379,6 +388,7 @@ const zhCN: Messages = {
   'midiPicker.samplesLabel': '或试试示例',
 
   'instrument.title': '乐器',
+  'instrument.groupLabel': '音色',
   'instrument.aria': '选择乐器',
   'instrument.panelLabel': '乐器',
   'instrument.fallback': '钢琴',

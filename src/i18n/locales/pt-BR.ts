@@ -62,6 +62,7 @@ const ptBR: Messages = {
   'topStrip.midi.blockedPill': 'Ativar MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': 'Visualização do instrumento',
+  'visualization.groupLabel': 'Visual',
   'visualization.piano.label': 'Piano',
   'visualization.piano.aria': 'Mostrar visualização de piano',
   'visualization.guitar.label': 'Violão',
@@ -152,12 +153,20 @@ const ptBR: Messages = {
 
   // ── Guia do braço (modo live) ──────────────────────────────
   'guitarGuide.title': 'Guia do braço',
+  'guitarGuide.position': 'Posição',
+  'guitarGuide.tune': 'Afinação',
+  'guitarGuide.chord': 'Acorde',
+  'guitarGuide.tips': 'Dicas',
   'guitarGuide.tuning': 'Afinação padrão · do grave ao agudo',
   'guitarGuide.tap': 'Toque ou clique em qualquer casa',
   'guitarGuide.drag': 'Arraste para os lados para explorar',
   'guitarGuide.keys': 'Setas movem · Enter ou Espaço toca',
   'guitarGuide.show': 'Mostrar guia do braço',
   'guitarGuide.hide': 'Ocultar guia do braço',
+  'guitarGuide.chordHint': 'Toque 2 ou mais notas para ver o acorde acima.',
+  'guitarGuide.empty': 'Toque num traste, use MIDI ou arraste para explorar.',
+  'guitarGuide.mobileCoachmark': 'Seu guia de violão está aqui',
+  'guitarGuide.mobileLabel': 'Guia de violão',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Acorde tocando',
@@ -404,6 +413,7 @@ const ptBR: Messages = {
 
   // ── Instrument menu ─────────────────────────────────────────
   'instrument.title': 'Instrumento',
+  'instrument.groupLabel': 'Som',
   'instrument.aria': 'Escolher instrumento',
   'instrument.panelLabel': 'Instrumento',
   'instrument.fallback': 'Piano',

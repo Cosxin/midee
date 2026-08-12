@@ -83,6 +83,7 @@ export const en = {
   'topStrip.midi.blockedPill': 'Enable MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': 'Visualization view',
+  'visualization.groupLabel': 'View',
   'visualization.piano.label': 'Piano',
   'visualization.piano.aria': 'Show piano visualization',
   'visualization.guitar.label': 'Guitar',
@@ -221,12 +222,20 @@ export const en = {
 
   // ── Guitar fretboard guide (live mode) ─────────────────────
   'guitarGuide.title': 'Fretboard guide',
+  'guitarGuide.position': 'Position',
+  'guitarGuide.tune': 'Tune',
+  'guitarGuide.chord': 'Chord',
+  'guitarGuide.tips': 'Tips',
   'guitarGuide.tuning': 'Standard tuning · low to high',
   'guitarGuide.tap': 'Tap or click any fret',
   'guitarGuide.drag': 'Drag sideways to explore',
   'guitarGuide.keys': 'Arrow keys move · Enter or Space plays',
   'guitarGuide.show': 'Show fretboard guide',
   'guitarGuide.hide': 'Hide fretboard guide',
+  'guitarGuide.chordHint': 'Play 2+ notes to see the chord above.',
+  'guitarGuide.empty': 'Tap a fret, play MIDI, or drag to explore.',
+  'guitarGuide.mobileCoachmark': 'Your guitar guide is here',
+  'guitarGuide.mobileLabel': 'Guitar guide',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Currently sounding chord',
@@ -436,6 +445,7 @@ export const en = {
 
   // ── Instrument menu ─────────────────────────────────────────
   'instrument.title': 'Instrument',
+  'instrument.groupLabel': 'Sound',
   'instrument.aria': 'Choose instrument',
   'instrument.panelLabel': 'Instrument',
   'instrument.fallback': 'Piano',

@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
 import type { VisualizationMode } from '../guitar/types'
 import { t } from '../i18n'
 import type { LiveLooperState } from '../midi/LiveLooper'
@@ -104,6 +104,7 @@ export interface KeyHintProps {
   onOctaveUp: () => void
   onClose: () => void
   onReopen: () => void
+  mobileCoachmarkVisible: () => boolean
 }
 
 // ── View components ──────────────────────────────────────────────────────
@@ -307,7 +308,10 @@ export function TopStripView(props: TopStripProps) {
           disabled={props.visualizationDisabled()}
           onChange={(m) => props.onVisualizationChange(m)}
         />
-        <span id="ts-instrument-slot" />
+        <span class="ts-sound-selector">
+          <span class="ts-control-label">{t('instrument.groupLabel')}</span>
+          <span id="ts-instrument-slot" />
+        </span>
         <div class="ts-sep" aria-hidden="true" />
         <button
           class="ts-pill ts-pill--midi"
@@ -599,6 +603,28 @@ export function HudView(props: HudProps) {
 
 export function KeyHintView(props: KeyHintProps) {
   const isGuitar = (): boolean => props.visualizationMode() === 'guitar'
+  const [guitarSection, setGuitarSection] = createSignal<'position' | 'tune' | 'chord' | 'tips'>(
+    'position',
+  )
+
+  const guitarGuideTab = (
+    section: 'position' | 'tune' | 'chord' | 'tips',
+    label: string,
+    icon: string,
+  ) => (
+    <button
+      class="gh-nav-item"
+      classList={{ 'is-active': guitarSection() === section }}
+      type="button"
+      role="tab"
+      aria-selected={guitarSection() === section ? 'true' : 'false'}
+      aria-controls={`gh-panel-${section}`}
+      onClick={() => setGuitarSection(section)}
+    >
+      <span class="gh-nav-icon" aria-hidden="true" innerHTML={icon} />
+      <span>{label}</span>
+    </button>
+  )
 
   return (
     <div
@@ -712,8 +738,7 @@ export function KeyHintView(props: KeyHintProps) {
           <div class="gh-head">
             <span class="gh-heading-icon" aria-hidden="true" innerHTML={icons.fretboard(16)} />
             <span class="gh-heading-copy">
-              <span class="gh-kicker">{t('instrument.guitar.name')}</span>
-              <span class="gh-title">{t('guitarGuide.title')}</span>
+              <span class="gh-kicker">{t('guitarGuide.mobileLabel')}</span>
             </span>
             <button
               class="kh-close"
@@ -726,55 +751,102 @@ export function KeyHintView(props: KeyHintProps) {
             />
           </div>
 
-          <div class="gh-neck">
-            <div class="gh-tuning-head">
-              <span>{t('guitarGuide.tuning')}</span>
-              <span class="gh-tuning-notes">
-                <span>E</span>
-                <span>A</span>
-                <span>D</span>
-                <span>G</span>
-                <span>B</span>
-                <span>E</span>
-              </span>
-            </div>
-            <div class="gh-fretboard" aria-hidden="true">
-              <span class="gh-fret gh-fret--1" />
-              <span class="gh-fret gh-fret--2" />
-              <span class="gh-fret gh-fret--3" />
-              <span class="gh-fret gh-fret--4" />
-              <span class="gh-string gh-string--1" />
-              <span class="gh-string gh-string--2" />
-              <span class="gh-string gh-string--3" />
-              <span class="gh-string gh-string--4" />
-              <span class="gh-string gh-string--5" />
-              <span class="gh-string gh-string--6" />
-              <span class="gh-marker gh-marker--3" />
-              <span class="gh-marker gh-marker--5" />
-              <span class="gh-touch-dot" />
-            </div>
+          <div class="gh-nav" role="tablist" aria-label={t('guitarGuide.title')}>
+            {guitarGuideTab('position', t('guitarGuide.position'), icons.fretboard(16))}
+            {guitarGuideTab('tune', t('guitarGuide.tune'), icons.instrument(16))}
+            {guitarGuideTab('chord', t('guitarGuide.chord'), icons.chord(16))}
+            {guitarGuideTab('tips', t('guitarGuide.tips'), icons.practice(16))}
           </div>
 
-          <div class="gh-actions">
-            <span class="gh-action">
-              <span class="gh-action-mark gh-action-mark--tap" aria-hidden="true" />
-              <span>{t('guitarGuide.tap')}</span>
-            </span>
-            <span class="gh-action">
-              <span class="gh-action-mark gh-action-mark--drag" aria-hidden="true">
-                ↔
-              </span>
-              <span>{t('guitarGuide.drag')}</span>
-            </span>
-          </div>
-
-          <div class="gh-keyboard-note">
-            <span class="gh-arrows" aria-hidden="true">
-              ← ↑ ↓ →
-            </span>
-            <span>{t('guitarGuide.keys')}</span>
+          <div class="gh-panel" id={`gh-panel-${guitarSection()}`} role="tabpanel">
+            <Switch>
+              <Match when={guitarSection() === 'position'}>
+                <div class="gh-neck">
+                  <div class="gh-tuning-head">
+                    <span>{t('guitarGuide.tuning')}</span>
+                    <span class="gh-tuning-notes">
+                      <span>E</span>
+                      <span>A</span>
+                      <span>D</span>
+                      <span>G</span>
+                      <span>B</span>
+                      <span>E</span>
+                    </span>
+                  </div>
+                  <div class="gh-position-map" aria-hidden="true">
+                    <div class="gh-fretboard">
+                      <span class="gh-fret gh-fret--1" />
+                      <span class="gh-fret gh-fret--2" />
+                      <span class="gh-fret gh-fret--3" />
+                      <span class="gh-fret gh-fret--4" />
+                      <span class="gh-string gh-string--1" />
+                      <span class="gh-string gh-string--2" />
+                      <span class="gh-string gh-string--3" />
+                      <span class="gh-string gh-string--4" />
+                      <span class="gh-string gh-string--5" />
+                      <span class="gh-string gh-string--6" />
+                      <span class="gh-marker gh-marker--3" />
+                      <span class="gh-marker gh-marker--5" />
+                      <span class="gh-touch-dot" />
+                    </div>
+                    <span class="gh-fret-labels">
+                      <span>3</span>
+                      <span>5</span>
+                      <span>7</span>
+                      <span>9</span>
+                    </span>
+                  </div>
+                  <span class="gh-panel-copy">{t('guitarGuide.tap')}</span>
+                </div>
+              </Match>
+              <Match when={guitarSection() === 'tune'}>
+                <div class="gh-detail">
+                  <span
+                    class="gh-detail-icon"
+                    aria-hidden="true"
+                    innerHTML={icons.instrument(24)}
+                  />
+                  <strong>{t('guitarGuide.tuning')}</strong>
+                  <span class="gh-tuning-row" role="img" aria-label="E A D G B E">
+                    <span>E</span>
+                    <span>A</span>
+                    <span>D</span>
+                    <span>G</span>
+                    <span>B</span>
+                    <span>E</span>
+                  </span>
+                </div>
+              </Match>
+              <Match when={guitarSection() === 'chord'}>
+                <div class="gh-detail">
+                  <span class="gh-detail-icon" aria-hidden="true" innerHTML={icons.chord(24)} />
+                  <strong>{t('guitarGuide.chord')}</strong>
+                  <span>{t('guitarGuide.chordHint')}</span>
+                </div>
+              </Match>
+              <Match when={guitarSection() === 'tips'}>
+                <div class="gh-actions">
+                  <span class="gh-action">
+                    <span class="gh-action-mark gh-action-mark--tap" aria-hidden="true" />
+                    <span>{t('guitarGuide.tap')}</span>
+                  </span>
+                  <span class="gh-action">
+                    <span class="gh-action-mark gh-action-mark--drag" aria-hidden="true">
+                      ↔
+                    </span>
+                    <span>{t('guitarGuide.drag')}</span>
+                  </span>
+                  <span class="gh-keyboard-note">{t('guitarGuide.keys')}</span>
+                </div>
+              </Match>
+            </Switch>
           </div>
         </section>
+      </Show>
+      <Show when={isGuitar() && props.mobileCoachmarkVisible()}>
+        <span class="gh-mobile-coachmark" role="status">
+          {t('guitarGuide.mobileCoachmark')}
+        </span>
       </Show>
       <button
         class="kh-reopen"
@@ -783,8 +855,12 @@ export function KeyHintView(props: KeyHintProps) {
         aria-label={isGuitar() ? t('guitarGuide.show') : t('hud.aria.kbdRefShow')}
         data-tip={isGuitar() ? t('guitarGuide.show') : t('hud.tip.kbdRefShow')}
         onClick={() => props.onReopen()}
-        innerHTML={isGuitar() ? icons.fretboard() : icons.keycap()}
-      />
+      >
+        <span innerHTML={isGuitar() ? icons.fretboard() : icons.keycap()} />
+        <Show when={isGuitar()}>
+          <span class="kh-reopen-label">{t('guitarGuide.mobileLabel')}</span>
+        </Show>
+      </button>
     </div>
   )
 }

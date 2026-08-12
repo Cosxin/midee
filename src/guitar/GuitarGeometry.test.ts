@@ -35,6 +35,15 @@ describe('guitar geometry', () => {
     }
   })
 
+  it('uses the lower instrument framing on desktop without shrinking phone touch rows', () => {
+    const desktop = createGuitarLayout(1041, 774)
+    const phone = createGuitarLayout(390, 844)
+    expect(desktop.fretboardTop).toBe(Math.round(774 * 0.54))
+    expect(phone.fretboardTop).toBe(Math.round(844 * 0.48))
+    expect(desktop.stringHeight).toBeGreaterThanOrEqual(MIN_FRET_TARGET_PX)
+    expect(phone.stringHeight).toBeGreaterThanOrEqual(MIN_FRET_TARGET_PX)
+  })
+
   it('centers active frets within pan bounds', () => {
     const layout = createGuitarLayout(390, 700)
     expect(centeredPanForFret(0, layout)).toBe(0)
