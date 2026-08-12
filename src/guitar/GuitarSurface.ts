@@ -1,4 +1,14 @@
-import { Application, Container, Graphics, Text, TextStyle, type Ticker } from 'pixi.js'
+import {
+  Application,
+  Assets,
+  Container,
+  FillPattern,
+  Graphics,
+  Text,
+  TextStyle,
+  type Texture,
+  type Ticker,
+} from 'pixi.js'
 import type { MasterClock } from '../core/clock/MasterClock'
 import type { MidiFile } from '../core/midi/types'
 import type { LiveNote, LiveNoteStore } from '../midi/LiveNoteStore'
@@ -42,6 +52,9 @@ const DOUBLE_FRET_MARKERS = new Set([12, 24])
 export const GUITAR_CLUSTER_WINDOW_SECONDS = 0.04
 const IDLE_GRACE_FRAMES = 30
 const STRING_NAMES = ['Low E', 'A', 'D', 'G', 'B', 'High E'] as const
+const FRETBOARD_TEXTURE_URL = '/textures/guitar-fretboard-rosewood.webp'
+const WOUND_STRING_COLOR = 0xdca06b
+const PLAIN_STRING_COLOR = 0xe8e4dc
 
 export function applyGuitarCanvasVisibility(canvas: HTMLCanvasElement, visible: boolean): void {
   canvas.style.visibility = visible ? '' : 'hidden'
@@ -298,6 +311,7 @@ export class GuitarSurface implements VisualizationSurface {
   private scene!: Container
   private graphics!: Graphics
   private labels!: Container
+  private fretboardPattern: FillPattern | null = null
   private accessibilityGrid!: GuitarAccessibilityGrid
   private layout = createGuitarLayout(1, 1)
   private theme: Theme = darkTheme
@@ -320,6 +334,7 @@ export class GuitarSurface implements VisualizationSurface {
   private interaction = new FretboardInteraction((hit) => this.publishSurfaceHit(hit))
   private activity = new GuitarRenderActivity()
   private clock: MasterClock | null = null
+  private canvasResizeObserver: ResizeObserver | null = null
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -337,6 +352,13 @@ export class GuitarSurface implements VisualizationSurface {
     this.labels = new Container()
     this.scene.addChild(this.graphics, this.labels)
     this.app.stage.addChild(this.scene)
+    try {
+      const fretboardTexture = await Assets.load<Texture>(FRETBOARD_TEXTURE_URL)
+      this.fretboardPattern = new FillPattern(fretboardTexture, 'repeat')
+    } catch {
+      // The flat theme fill below remains a complete fallback if the texture cannot load.
+      this.fretboardPattern = null
+    }
     this.compatibilityViewport = new Viewport({
       canvasWidth: this.app.screen.width,
       canvasHeight: this.app.screen.height,
@@ -358,6 +380,8 @@ export class GuitarSurface implements VisualizationSurface {
     })
     if (import.meta.env.VITE_ENABLE_E2E === '1') canvas.dataset.e2eSurfaceHitCount = '0'
     this.resize(window.innerWidth, window.innerHeight)
+    this.canvasResizeObserver = new ResizeObserver(() => this.syncCanvasSize())
+    this.canvasResizeObserver.observe(canvas)
     window.addEventListener('resize', this.handleResize)
   }
 
@@ -446,6 +470,7 @@ export class GuitarSurface implements VisualizationSurface {
 
   resumeAutoRender(): void {
     this.activity.exportMode = false
+    this.syncCanvasSize()
     this.wake()
   }
 
@@ -526,6 +551,8 @@ export class GuitarSurface implements VisualizationSurface {
 
   destroy(): void {
     window.removeEventListener('resize', this.handleResize)
+    this.canvasResizeObserver?.disconnect()
+    this.canvasResizeObserver = null
     this.unbindCanvasEvents()
     this.cleanupGestures()
     this.liveStoreUnsub?.()
@@ -745,6 +772,22 @@ export class GuitarSurface implements VisualizationSurface {
       alpha: 0.96,
     })
 
+    if (this.fretboardPattern) {
+      g.rect(
+        FRETBOARD_LABEL_WIDTH,
+        this.layout.fretboardTop,
+        this.layout.width - FRETBOARD_LABEL_WIDTH,
+        this.layout.fretboardHeight,
+      ).fill({ fill: this.fretboardPattern, alpha: 0.54 })
+      // Keep the generated wood subordinate to notes, strings, and theme contrast.
+      g.rect(
+        FRETBOARD_LABEL_WIDTH,
+        this.layout.fretboardTop,
+        this.layout.width - FRETBOARD_LABEL_WIDTH,
+        this.layout.fretboardHeight,
+      ).fill({ color: this.theme.blackKey, alpha: 0.22 })
+    }
+
     // Subtle row and fret variation gives the board material depth while
     // keeping the note colors as the only saturated elements.
     for (let row = 0; row < GUITAR_STRING_COUNT; row++) {
@@ -775,17 +818,35 @@ export class GuitarSurface implements VisualizationSurface {
             ]
           : [this.layout.fretboardTop + this.layout.fretboardHeight / 2]
         for (const markerY of markerYs) {
-          g.circle(markerX, markerY, 4).fill({ color: this.theme.whiteKey, alpha: 0.13 })
+          g.circle(markerX + 1, markerY + 1, 7).fill({ color: 0x000000, alpha: 0.34 })
+          g.circle(markerX, markerY, 6.5)
+            .fill({ color: 0xd8cec6, alpha: 0.62 })
+            .stroke({ color: 0xffffff, alpha: 0.28, width: 1 })
+          g.circle(markerX - 1.5, markerY - 1.5, 1.7).fill({ color: 0xffffff, alpha: 0.38 })
         }
       }
 
       const isNut = fret === 1
+      g.moveTo(x + 1.5, this.layout.fretboardTop)
+        .lineTo(x + 1.5, this.layout.height)
+        .stroke({
+          color: 0x000000,
+          alpha: isNut ? 0.58 : 0.48,
+          width: isNut ? 6 : 4,
+        })
       g.moveTo(x, this.layout.fretboardTop)
         .lineTo(x, this.layout.height)
         .stroke({
-          color: isNut ? this.theme.whiteKey : this.theme.keyBorder,
-          alpha: isNut ? 0.42 : 0.9,
-          width: isNut ? 3 : 1,
+          color: isNut ? 0xf0e8df : 0xbaa796,
+          alpha: isNut ? 0.84 : 0.74,
+          width: isNut ? 4 : 2.4,
+        })
+      g.moveTo(x - 0.5, this.layout.fretboardTop)
+        .lineTo(x - 0.5, this.layout.height)
+        .stroke({
+          color: 0xffffff,
+          alpha: isNut ? 0.78 : 0.46,
+          width: isNut ? 1.2 : 0.75,
         })
       if (fret === 0 || FRET_MARKERS.has(fret)) {
         this.addText(
@@ -803,12 +864,16 @@ export class GuitarSurface implements VisualizationSurface {
     for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
       const y = fretboardStringY(string, this.layout)
       const stringWidth = 1 + (GUITAR_STRING_COUNT - 1 - string) * 0.22
+      const stringColor = string <= 3 ? WOUND_STRING_COLOR : PLAIN_STRING_COLOR
       g.moveTo(FRETBOARD_LABEL_WIDTH, y)
         .lineTo(this.layout.width, y)
-        .stroke({ color: 0x000000, alpha: 0.42, width: stringWidth + 2 })
+        .stroke({ color: 0x000000, alpha: 0.58, width: stringWidth + 2.6 })
       g.moveTo(FRETBOARD_LABEL_WIDTH, y)
         .lineTo(this.layout.width, y)
-        .stroke({ color: this.theme.whiteKey, alpha: 0.58, width: stringWidth })
+        .stroke({ color: stringColor, alpha: 0.94, width: stringWidth })
+      g.moveTo(FRETBOARD_LABEL_WIDTH, y - 0.45)
+        .lineTo(this.layout.width, y - 0.45)
+        .stroke({ color: 0xffffff, alpha: string <= 3 ? 0.22 : 0.34, width: 0.55 })
       this.addText(STRING_NAMES[string]!, FRETBOARD_LABEL_WIDTH / 2, y, 10, 0.82, 0.5, '600')
     }
 
@@ -1040,6 +1105,17 @@ export class GuitarSurface implements VisualizationSurface {
     // Export owns the backing-store dimensions until it restores them after capture.
     if (this.activity.exportMode) return
     this.resize(window.innerWidth, window.innerHeight)
+  }
+
+  private syncCanvasSize(): void {
+    if (this.activity.exportMode || !this.app) return
+    const canvas = this.app.canvas as HTMLCanvasElement | undefined
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const width = Math.max(1, Math.round(rect.width))
+    const height = Math.max(1, Math.round(rect.height))
+    if (Math.abs(this.layout.width - width) < 1 && Math.abs(this.layout.height - height) < 1) return
+    this.resize(width, height)
   }
 
   private cleanupGestures(): void {

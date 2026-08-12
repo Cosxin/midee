@@ -23,6 +23,7 @@ export function VisualizationSelector(props: VisualizationSelectorProps) {
 
   return (
     <div class="ts-visualization-selector">
+      <span class="ts-control-label">{t('visualization.groupLabel')}</span>
       <div
         class="ts-view-switch"
         classList={{ 'is-disabled': props.disabled }}

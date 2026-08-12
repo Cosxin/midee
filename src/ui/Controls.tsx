@@ -26,9 +26,28 @@ import {
   ZOOM_DEFAULT,
 } from './ControlsView'
 import { DragCoachmark } from './DragCoachmark'
+import { icons } from './icons'
 import { isLearnCoachmarkSeen, LearnCoachmark } from './LearnCoachmark'
+import { isNarrowViewport } from './utils'
 
 const SKIP_SECONDS = 10
+const GUITAR_GUIDE_SEEN_KEY = 'midee.guitarGuideSeen'
+
+function loadGuitarGuideSeen(): boolean {
+  try {
+    return localStorage.getItem(GUITAR_GUIDE_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function saveGuitarGuideSeen(): void {
+  try {
+    localStorage.setItem(GUITAR_GUIDE_SEEN_KEY, '1')
+  } catch {
+    // private-mode best effort
+  }
+}
 
 export { ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN } from './ControlsView'
 
@@ -142,10 +161,16 @@ export class Controls {
     const [learnCoachmarkSeen, setLearnCoachmarkSeen] = createSignal(isLearnCoachmarkSeen())
     const [instrumentLoading, setInstrumentLoading] = createSignal(false)
     const [keyHintCollapsed, setKeyHintCollapsed] = createSignal(loadKeyHintHidden())
-    // Guitar's low frets are prime chord-reading space, so its keyboard
-    // reference starts as the existing compact reopen chip. Expansion is
-    // session-only and does not overwrite the user's saved Piano preference.
-    const [guitarKeyHintExpanded, setGuitarKeyHintExpanded] = createSignal(false)
+    // Guitar uses a dedicated rail on desktop and a compact entry on phones.
+    // Expansion is session-only and does not overwrite the user's saved Piano
+    // keyboard-reference preference.
+    const initialGuitarGuideSeen = loadGuitarGuideSeen()
+    const [guitarKeyHintExpanded, setGuitarKeyHintExpanded] = createSignal(!isNarrowViewport())
+    const [guitarGuideSeen, setGuitarGuideSeen] = createSignal(initialGuitarGuideSeen)
+    const [guitarHasActiveNotes, setGuitarHasActiveNotes] = createSignal(
+      store.effectiveVisualizationMode === 'guitar' &&
+        opts.services.renderer.activeKeys.value.size > 0,
+    )
     // Session-only: the HUD always starts open on load (not persisted).
     const [hudClosed, setHudClosed] = createSignal(false)
     const [octave, setOctave] = createSignal(4)
@@ -375,6 +400,21 @@ export class Controls {
             }
             hasDragged={hudHasDragged}
           />
+          <div
+            id="guitar-empty-state"
+            classList={{
+              'guitar-empty-state--visible':
+                mode() === 'live' && visualizationMode() === 'guitar' && !guitarHasActiveNotes(),
+            }}
+            aria-hidden={
+              mode() === 'live' && visualizationMode() === 'guitar' && !guitarHasActiveNotes()
+                ? undefined
+                : 'true'
+            }
+          >
+            <span aria-hidden="true" innerHTML={icons.fretboard(16)} />
+            <span>{t('guitarGuide.empty')}</span>
+          </div>
           <KeyHintView
             visible={() => mode() === 'live'}
             idle={hudIdle}
@@ -388,6 +428,8 @@ export class Controls {
             onClose={() => {
               if (visualizationMode() === 'guitar') {
                 setGuitarKeyHintExpanded(false)
+                setGuitarGuideSeen(true)
+                saveGuitarGuideSeen()
                 return
               }
               this.setKeyHintCollapsed(true)
@@ -396,11 +438,16 @@ export class Controls {
             onReopen={() => {
               if (visualizationMode() === 'guitar') {
                 setGuitarKeyHintExpanded(true)
+                setGuitarGuideSeen(true)
+                saveGuitarGuideSeen()
                 return
               }
               this.setKeyHintCollapsed(false)
               saveKeyHintHidden(false)
             }}
+            mobileCoachmarkVisible={() =>
+              visualizationMode() === 'guitar' && !guitarKeyHintExpanded() && !guitarGuideSeen()
+            }
           />
         </>
       ),
@@ -441,15 +488,40 @@ export class Controls {
         () => store.effectiveVisualizationMode,
         (m) => {
           setVisualizationMode(m)
-          if (m === 'guitar') setGuitarKeyHintExpanded(false)
           this.refreshUi()
         },
       ),
+      opts.services.renderer.activeKeys.subscribe((keys) => setGuitarHasActiveNotes(keys.size > 0)),
       watch(
         () => store.state.visualizationForced,
         (forced) => setVisualizationDisabled(forced !== null),
       ),
     )
+
+    const guideOpen = (): boolean =>
+      mode() === 'live' && visualizationMode() === 'guitar' && guitarKeyHintExpanded()
+    document.body.classList.toggle('guitar-guide-open', guideOpen())
+    this.unsubs.push(
+      watch(guideOpen, (open) => document.body.classList.toggle('guitar-guide-open', open)),
+    )
+
+    // Keep the guide's presentation aligned with its responsive contract when
+    // a browser or device crosses the desktop/mobile breakpoint mid-session.
+    // Desktop keeps the rail visible; phones retain the compact entry point
+    // until the player explicitly asks for the bottom sheet.
+    const desktopGuideQuery = window.matchMedia('(min-width: 641px)')
+    const syncGuideForViewport = (matches: boolean): void => {
+      if (!matches) {
+        setGuitarKeyHintExpanded(false)
+      } else {
+        setGuitarKeyHintExpanded(true)
+      }
+    }
+    const onDesktopGuideChange = (event: MediaQueryListEvent): void =>
+      syncGuideForViewport(event.matches)
+    desktopGuideQuery.addEventListener('change', onDesktopGuideChange)
+    this.unsubs.push(() => desktopGuideQuery.removeEventListener('change', onDesktopGuideChange))
+    requestAnimationFrame(() => syncGuideForViewport(desktopGuideQuery.matches))
 
     // 60Hz clock tick — imperative per §2 rule 4.
     this.unsubs.push(
@@ -580,6 +652,7 @@ export class Controls {
     this.compactMO = null
     if (this.compactRaf) cancelAnimationFrame(this.compactRaf)
     this.compactRaf = 0
+    document.body.classList.remove('guitar-guide-open')
   }
 
   // ── Private helpers ─────────────────────────────────────────────────

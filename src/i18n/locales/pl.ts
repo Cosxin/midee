@@ -66,6 +66,7 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'topStrip.midi.blockedPill': 'Włącz MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': 'Widok wizualizacji',
+  'visualization.groupLabel': 'Widok',
   'visualization.piano.label': 'Fortepian',
   'visualization.piano.aria': 'Pokaż wizualizację fortepianu',
   'visualization.guitar.label': 'Gitara',
@@ -192,12 +193,20 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'keyHint.shortcut.metronome': 'Metronom',
 
   'guitarGuide.title': 'Przewodnik po gryfie',
+  'guitarGuide.position': 'Pozycja',
+  'guitarGuide.tune': 'Strój',
+  'guitarGuide.chord': 'Akord',
+  'guitarGuide.tips': 'Wskazówki',
   'guitarGuide.tuning': 'Strój standardowy · od niskich do wysokich',
   'guitarGuide.tap': 'Dotknij lub kliknij dowolny próg',
   'guitarGuide.drag': 'Przeciągnij w bok, aby eksplorować',
   'guitarGuide.keys': 'Strzałki przesuwają · Enter lub Spacja gra',
   'guitarGuide.show': 'Pokaż przewodnik po gryfie',
   'guitarGuide.hide': 'Ukryj przewodnik po gryfie',
+  'guitarGuide.chordHint': 'Zagraj co najmniej 2 nuty, aby zobaczyć akord powyżej.',
+  'guitarGuide.empty': 'Dotknij progu, zagraj MIDI lub przeciągnij, aby odkrywać.',
+  'guitarGuide.mobileCoachmark': 'Tutaj znajdziesz przewodnik po gitarze',
+  'guitarGuide.mobileLabel': 'Przewodnik gitary',
 
   'chord.aria': 'Aktualnie brzmiący akord',
 
@@ -392,6 +401,7 @@ const pl: Messages & Record<PolishPluralKey, string> = {
   'midiPicker.samplesLabel': 'Albo odtwórz jeden z przykładów',
 
   'instrument.title': 'Instrument',
+  'instrument.groupLabel': 'Brzmienie',
   'instrument.aria': 'Wybierz instrument',
   'instrument.panelLabel': 'Instrument',
   'instrument.fallback': 'Fortepian',

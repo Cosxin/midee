@@ -65,6 +65,7 @@ const fr: Messages = {
   'topStrip.midi.blockedPill': 'Activer MIDI',
   'topStrip.midi.pillFallback': 'MIDI',
   'visualization.aria': 'Vue de visualisation',
+  'visualization.groupLabel': 'Vue',
   'visualization.piano.label': 'Piano',
   'visualization.piano.aria': 'Afficher la visualisation piano',
   'visualization.guitar.label': 'Guitare',
@@ -154,12 +155,20 @@ const fr: Messages = {
 
   // ── Guide du manche (mode live) ────────────────────────────
   'guitarGuide.title': 'Guide du manche',
+  'guitarGuide.position': 'Position',
+  'guitarGuide.tune': 'Accordage',
+  'guitarGuide.chord': 'Accord',
+  'guitarGuide.tips': 'Conseils',
   'guitarGuide.tuning': 'Accordage standard · du grave à l’aigu',
   'guitarGuide.tap': 'Touchez ou cliquez sur une frette',
   'guitarGuide.drag': 'Faites glisser latéralement pour explorer',
   'guitarGuide.keys': 'Les flèches déplacent · Entrée ou Espace joue',
   'guitarGuide.show': 'Afficher le guide du manche',
   'guitarGuide.hide': 'Masquer le guide du manche',
+  'guitarGuide.chordHint': 'Jouez au moins 2 notes pour voir l’accord au-dessus.',
+  'guitarGuide.empty': 'Touchez une frette, jouez en MIDI ou faites glisser pour explorer.',
+  'guitarGuide.mobileCoachmark': 'Votre guide guitare est ici',
+  'guitarGuide.mobileLabel': 'Guide guitare',
 
   // ── ChordOverlay ───────────────────────────────────────────
   'chord.aria': 'Accord en cours',
@@ -407,6 +416,7 @@ const fr: Messages = {
 
   // ── Instrument menu ─────────────────────────────────────────
   'instrument.title': 'Instrument',
+  'instrument.groupLabel': 'Son',
   'instrument.aria': 'Choisir un instrument',
   'instrument.panelLabel': 'Instrument',
   'instrument.fallback': 'Piano',
