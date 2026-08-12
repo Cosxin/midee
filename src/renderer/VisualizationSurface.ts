@@ -50,6 +50,13 @@ export interface SurfaceActiveVoice {
   fret?: number
 }
 
+/** Fret-space window currently visible on an instrument surface. Fractional
+ * edges preserve partial frets when the main neck is panned. */
+export interface SurfaceFretboardViewport {
+  startFret: number
+  fretSpan: number
+}
+
 /**
  * Contract an instrument visualization surface must satisfy to be mounted
  * behind `AppServices.renderer`. Concrete piano and guitar renderers satisfy
@@ -84,6 +91,8 @@ export interface VisualizationSurface {
   readonly activeKeys: EventSignal<ReadonlyMap<VisualizationHitId, number>>
   /** Optional detailed sounding voices for companion UI such as the guitar guide. */
   readonly activeVoices?: EventSignal<readonly SurfaceActiveVoice[]>
+  /** Optional exact visible neck window for a synchronized miniature guide. */
+  readonly fretboardViewport?: EventSignal<SurfaceFretboardViewport | null>
   /** Interactive surfaces expose note events; passive surfaces may omit it. */
   readonly surfaceHits?: EventSignal<SurfaceHit | null>
 

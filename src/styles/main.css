@@ -4343,22 +4343,10 @@ body.visualization-guitar #key-hint {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: var(--gh-fret-pos);
   width: 2px;
   background: linear-gradient(90deg, rgba(45, 31, 24, 0.72), rgba(239, 218, 193, 0.72));
   box-shadow: 1px 0 2px rgba(0, 0, 0, 0.48);
-}
-
-.gh-fret--1 {
-  left: 20%;
-}
-.gh-fret--2 {
-  left: 40%;
-}
-.gh-fret--3 {
-  left: 60%;
-}
-.gh-fret--4 {
-  left: 80%;
 }
 
 .gh-string {
@@ -4399,18 +4387,12 @@ body.visualization-guitar #key-hint {
 .gh-marker {
   position: absolute;
   top: 50%;
+  left: var(--gh-marker-pos);
   width: 5px;
   height: 5px;
   background: rgba(255, 237, 213, 0.34);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-}
-
-.gh-marker--3 {
-  left: 50%;
-}
-.gh-marker--5 {
-  left: 90%;
 }
 
 .gh-touch-dot {
@@ -7155,20 +7137,8 @@ body.canvas-hidden #kbd-resizer {
   .kh--guitar .gh-fret-labels span {
     position: absolute;
     left: 0;
+    top: var(--gh-fret-label-pos);
     transform: translateY(-50%);
-  }
-
-  .kh--guitar .gh-fret-labels span:nth-child(1) {
-    top: 20%;
-  }
-  .kh--guitar .gh-fret-labels span:nth-child(2) {
-    top: 40%;
-  }
-  .kh--guitar .gh-fret-labels span:nth-child(3) {
-    top: 60%;
-  }
-  .kh--guitar .gh-fret-labels span:nth-child(4) {
-    top: 80%;
   }
 
   .kh--guitar .gh-fret {
@@ -7177,17 +7147,8 @@ body.canvas-hidden #kbd-resizer {
     width: auto;
     height: 2px;
   }
-  .kh--guitar .gh-fret--1 {
-    top: 20%;
-  }
-  .kh--guitar .gh-fret--2 {
-    top: 40%;
-  }
-  .kh--guitar .gh-fret--3 {
-    top: 60%;
-  }
-  .kh--guitar .gh-fret--4 {
-    top: 80%;
+  .kh--guitar .gh-fret {
+    top: var(--gh-fret-pos);
   }
 
   .kh--guitar .gh-string {
@@ -7216,12 +7177,8 @@ body.canvas-hidden #kbd-resizer {
     left: 88%;
   }
 
-  .kh--guitar .gh-marker--3 {
-    top: 50%;
-    left: 50%;
-  }
-  .kh--guitar .gh-marker--5 {
-    top: 90%;
+  .kh--guitar .gh-marker {
+    top: var(--gh-marker-pos);
     left: 50%;
   }
   .kh--guitar .gh-touch-dot {

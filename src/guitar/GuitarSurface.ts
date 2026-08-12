@@ -17,6 +17,7 @@ import { darkTheme, getTrackColor, type Theme } from '../renderer/theme'
 import type {
   LiveVoiceSource,
   SurfaceActiveVoice,
+  SurfaceFretboardViewport,
   SurfaceHit,
   VisualizationFrameSource,
   VisualizationHitId,
@@ -306,6 +307,7 @@ interface PointerGesture {
 export class GuitarSurface implements VisualizationSurface {
   readonly activeKeys = createEventSignal<ReadonlyMap<VisualizationHitId, number>>(new Map())
   readonly activeVoices = createEventSignal<readonly SurfaceActiveVoice[]>([])
+  readonly fretboardViewport = createEventSignal<SurfaceFretboardViewport | null>(null)
   readonly surfaceHits: EventSignal<SurfaceHit | null> = createEventSignal<SurfaceHit | null>(null)
 
   private app!: Application
@@ -321,6 +323,7 @@ export class GuitarSurface implements VisualizationSurface {
   private schedule: GuitarSchedule = indexGuitarNotes([])
   private currentWindow: GuitarScheduleWindow = { active: [], upcoming: [], inspected: 0 }
   private activeVoiceSignature = ''
+  private fretboardViewportSignature = ''
   private liveStore: LiveNoteStore | null = null
   private loopStore: LiveNoteStore | null = null
   private liveStoreUnsub: (() => void) | null = null
@@ -666,6 +669,16 @@ export class GuitarSurface implements VisualizationSurface {
     })
     this.drawHighway(g, currentTime)
     this.drawFretboard(g)
+
+    const fretboardViewport = {
+      startFret: this.panX / this.layout.fretWidth,
+      fretSpan: (this.layout.width - FRETBOARD_LABEL_WIDTH) / this.layout.fretWidth,
+    }
+    const fretboardViewportSignature = `${fretboardViewport.startFret.toFixed(3)}:${fretboardViewport.fretSpan.toFixed(3)}`
+    if (fretboardViewportSignature !== this.fretboardViewportSignature) {
+      this.fretboardViewportSignature = fretboardViewportSignature
+      this.fretboardViewport.set(fretboardViewport)
+    }
 
     const colors = new Map<number, number>()
     const activeVoices: SurfaceActiveVoice[] = []

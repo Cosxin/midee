@@ -8,6 +8,7 @@
 - Desktop active chord: `/private/tmp/midee-guitar-ui-chord-desktop-final.png`
 - Desktop MIDI Play with guide: `/private/tmp/midee-guitar-play-guide-desktop-final-v2.png`
 - Desktop playback-follow Position guide: `/private/tmp/midee-guitar-guide-follow-position-final.png`
+- Desktop synchronized guide/main fretboard: `/private/tmp/midee-guitar-guide-synced-desktop-final.png`
 - Desktop playback-follow Chord guide: `/private/tmp/midee-guitar-guide-follow-chord-final.png`
 - Mobile compact guide: `/private/tmp/midee-guitar-ui-final-mobile-v4.png`
 - Mobile Chord panel: `/private/tmp/midee-guitar-ui-final-mobile-chord-v4.png`
@@ -86,9 +87,15 @@ The final combined images show the selected guitar composition rather than the p
 - Fixed by publishing the renderer's exact active guitar voice assignments through the stable surface router, then driving the miniature neck, fret window, string/fret summary, and Chord panel from that stream. The guide no longer recomputes a competing fingering.
 - Post-fix evidence: seek and playback changed the guide DOM, marker positions, fret labels, chord name, and note list; desktop remained 1202px wide and the open mobile sheet remained within x=8..382 and bottom=836 on a 390 x 844 viewport.
 
+### Iteration 6 - one fret coordinate system
+
+- P1: the miniature guide and bottom neck used the same active fingering data but different visible fret windows; out-of-window notes were clamped to the guide edge and the four decorative divisions did not describe the bottom neck.
+- Fixed by publishing the renderer's exact fractional `startFret` and `fretSpan`, drawing the guide's fret boundaries, labels, and markers from that viewport, and omitting active dots outside the visible range instead of clamping them.
+- Post-fix evidence at the reported 1910 x 1277 viewport: guide and main neck both show the same visible range and marker sequence; fret 13 appears at the same normalized location, while sounding fret 3 is truthfully absent from both visible neck regions rather than pinned to the guide edge.
+
 ## Verification
 
-- `npm run check`: passed, 55 files and 686/686 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
+- `npm run check`: passed, 55 files and 687/687 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
 - `npx vite build`: passed. Existing chunk-size warnings remain for the Pixi and main bundles.
 - `git diff --check` and `git diff --cached --check`: passed.
 - Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live and loaded MIDI Play modes, playback, seek, guide open/close, Position/Chord tabs, changing exact string/fret assignments, active chord, responsive bounds, document overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
