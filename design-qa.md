@@ -149,6 +149,25 @@ The final user-report comparison also shows one spatial fretboard instead of two
 - Fixed by making the neck height respond to the viewport, removing the panel and note-list scroll owners, and laying out up to six sounding strings in a compact two-column grid. A compact-height breakpoint keeps all four guide modes as 44px targets while reducing only the neck and inspector spacing.
 - Orca proof at 850 x 838: the rail is fully visible at x=7..225 and y=88..824; the six-string worst-case panel reports clientHeight=scrollHeight=437px, the note grid reports clientHeight=scrollHeight=106px, every note row reports equal client and scroll dimensions, and both document overflow axes remain zero. Tune, Chord, and Tips also report equal panel client and scroll heights.
 
+### Iteration 13 - stable vertical rail width
+
+- P1: the vertical rail used a viewport-relative clamp, so it narrowed to 218px on compact desktops and stopped growing at 250px on wide screens. The same guide consequently felt cramped at one width and undersized at another, with longer musical labels losing useful room.
+- Fixed by holding the desktop rail at 288px, widening its single synchronized neck to 172px, and reserving a stable 84px column for the visible-fret range so the chord column owns the remaining width.
+- Rendered proof with a loaded Chopin sample: at both 720 x 838 and 1440 x 1000 the rail is exactly 288px wide and the neck is 172px wide. The panel and active-note list report equal client and scroll heights, a synthetic `GMaddb9/B` stress label reports equal client and scroll widths, and both document overflow axes remain zero.
+
+### Iteration 14 - content-stable vertical composition
+
+- P1: although the rail width was stable, changing from one to six sounding strings still changed the intrinsic height of the note grid. Flex shrink then moved the header, tabs, panel, and visual, while dense passages could be clipped inside the hidden-overflow panel.
+- Fixed by giving the header, compact two-group control row, navigation, and panel stable flex regions; reserving one truthful six-string footprint for both live and empty note states; and anchoring the explanatory detail independently of the note count. A height-aware wide-screen neck keeps the entire composition visible without internal scrolling.
+- P2: the first stable layout exposed ellipsis on real extended chords such as `Fmadd9/G#`. The readout now uses a fixed 27px display size and a 76px fret-range column; stress labels through `A#sus4add9/F` fit without changing the card geometry.
+- Orca browser proof across seek positions 0, 3, 8, 24, 40, 65, 90, and 120 seconds: one to six sounding rows retain identical rail, header, control, tab, panel, visual, hero, and note-list bounds. At 850 x 838 the rail remains 288 x 736px, panel clientHeight equals scrollHeight at 493px, note-list clientHeight equals scrollHeight at 106px, both side placements work, horizontal mode remains bounded, and both document overflow axes remain zero. The constrained wide composition at 1187 x 838 likewise reports fixed bounds and zero panel/list overflow.
+
+### Iteration 15 - control console and floating guide action
+
+- P2: the layout and side choices still read as four unrelated segmented buttons, while collapsing the guide left an anonymous 40px icon that did not communicate what it would restore.
+- Fixed by grouping the two control families inside one recessed luthier-console surface, separating the side controls with a fine bronze divider, strengthening the tactile selected states, and retaining restrained hover/focus feedback. The collapsed action is now a labeled 146 x 46px brass-edged `Guitar guide` tab with project typography, a visible instrument icon, and a larger pointer target.
+- Rendered verification at 1187 x 838: the open control module is 262 x 48px, both control families retain 40px-high actions, and the panel remains 264 x 385px. The collapsed action is 146 x 46px, opening and closing preserve the simulator state, and both document overflow axes remain zero. The Orca browser supplied the live collapsed-state dimensions before its runtime bridge became unavailable; the final open/closed image comparison used the local browser harness against the same Vite page.
+
 ## Verification
 
 - `npm run check`: passed, 56 files and 692/692 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
