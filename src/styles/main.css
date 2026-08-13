@@ -9651,6 +9651,8 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
   }
 
   body.guitar-guide-vertical .kh--guitar .gh-body {
+    --gh-vertical-fretboard-h: clamp(92px, calc(100dvh - 672px), 247px);
+
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -9787,7 +9789,7 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
   body.guitar-guide-vertical .kh--guitar .gh-panel {
     flex: 1 1 auto;
     padding: 8px;
-    overflow-y: auto;
+    overflow: hidden;
     background: rgba(3, 3, 8, 0.26);
     border-color: rgba(236, 178, 112, 0.12);
     border-radius: 12px;
@@ -9819,7 +9821,7 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
   }
 
   body.guitar-guide-vertical .gh-fretboard {
-    height: 248px;
+    height: var(--gh-vertical-fretboard-h);
     border-color: rgba(242, 197, 143, 0.28);
     border-radius: 7px;
     box-shadow:
@@ -9829,7 +9831,7 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
 
   body.guitar-guide-vertical .gh-fret-labels {
     width: 18px;
-    height: 248px;
+    height: var(--gh-vertical-fretboard-h);
     flex-basis: 18px;
     color: #f0aa57;
     font-size: 8.5px;
@@ -9882,17 +9884,91 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
   }
 
   body.guitar-guide-vertical .gh-position-list {
-    max-height: 128px;
-    gap: 6px;
-    overflow-y: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    overflow: visible;
   }
 
   body.guitar-guide-vertical .gh-position-row {
-    min-height: 42px;
-    padding-inline: 8px;
+    min-height: 32px;
+    grid-template-columns: 8px minmax(17px, auto) minmax(0, 1fr) 12px;
+    gap: 4px;
+    padding: 3px 5px;
     background: rgba(255, 255, 255, 0.026);
     border-color: rgba(236, 178, 112, 0.13);
     border-radius: 9px;
+  }
+
+  body.guitar-guide-vertical .gh-position-row:not(:has(.gh-position-outside)) {
+    grid-template-columns: 8px minmax(17px, auto) minmax(0, 1fr);
+  }
+
+  body.guitar-guide-vertical .gh-position-row > strong {
+    font-size: 9px;
+  }
+
+  body.guitar-guide-vertical .gh-position-coordinates {
+    gap: 2px;
+  }
+
+  body.guitar-guide-vertical .gh-position-coordinates > span {
+    padding: 2px;
+    font-size: 6.5px;
+  }
+}
+
+@media (min-width: 641px) and (max-height: 760px) {
+  body.guitar-guide-vertical .kh--guitar .gh-body {
+    --gh-vertical-fretboard-h: 64px;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav-item {
+    min-height: 44px;
+    gap: 0;
+    padding: 3px 2px;
+    font-size: 7.5px;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav-icon {
+    display: none;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-panel {
+    padding: 6px;
+  }
+
+  body.guitar-guide-vertical .gh-position-inspector {
+    gap: 5px;
+  }
+
+  body.guitar-guide-vertical .gh-vertical-visual {
+    gap: 5px;
+    padding: 6px;
+  }
+
+  body.guitar-guide-vertical .gh-position-hero {
+    padding: 6px 8px 6px 12px;
+  }
+
+  body.guitar-guide-vertical .gh-position-current strong {
+    font-size: 26px;
+  }
+
+  body.guitar-guide-vertical .gh-position-list {
+    gap: 4px;
+  }
+
+  body.guitar-guide-vertical .gh-position-row {
+    min-height: 28px;
+  }
+
+  body.guitar-guide-vertical .gh-position-context {
+    display: none;
   }
 }
 
