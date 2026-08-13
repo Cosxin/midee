@@ -143,6 +143,12 @@ The final user-report comparison also shows one spatial fretboard instead of two
 - Orca browser proof at 1500 x 1000: vertical-left rail x=7..247 and canvas x=247..1500; vertical-right rail x=1253..1493 and canvas x=0..1253. The rail is 240px wide on both sides, its content panel is 216px wide without internal scroll, the visual ends at y=656 before the live inspector begins at y=664, and both document overflow axes remain zero.
 - Horizontal regression proof after returning through the visible layout switch: dock x=7..1493 and y=813..993, canvas x=0..1500 and y=0..800, panel scrollHeight equals clientHeight, no vertical visual remains mounted, and both document overflow axes remain zero.
 
+### Iteration 12 - full-height vertical content
+
+- P1: the vertical Position panel still owned an internal scrollbar because its fixed 248px neck and stacked sounding-note rows could exceed the rail's available height.
+- Fixed by making the neck height respond to the viewport, removing the panel and note-list scroll owners, and laying out up to six sounding strings in a compact two-column grid. A compact-height breakpoint keeps all four guide modes as 44px targets while reducing only the neck and inspector spacing.
+- Orca proof at 850 x 838: the rail is fully visible at x=7..225 and y=88..824; the six-string worst-case panel reports clientHeight=scrollHeight=437px, the note grid reports clientHeight=scrollHeight=106px, every note row reports equal client and scroll dimensions, and both document overflow axes remain zero. Tune, Chord, and Tips also report equal panel client and scroll heights.
+
 ## Verification
 
 - `npm run check`: passed, 56 files and 692/692 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
