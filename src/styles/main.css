@@ -6889,7 +6889,7 @@ body.canvas-hidden #kbd-resizer {
 ───────────────────────────────────────── */
 
 :root {
-  --guitar-guide-rail-w: clamp(154px, 12.8vw, 190px);
+  --guitar-guide-rail-w: clamp(218px, 16vw, 250px);
   --guitar-guide-gutter: 7px;
 }
 
@@ -9065,4 +9065,882 @@ body:not(.visualization-guitar) #top-strip[data-mode="play"] .ts-chord-slot {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Guitar fretboard layout switch. Horizontal keeps the full interactive neck
+   and docks its readout below it; vertical replaces that neck with one synced
+   side view. The body classes are mutually exclusive, so both never render. */
+.gh-control-cluster {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.gh-control-group {
+  min-width: 0;
+  padding: 2px;
+  margin: 0;
+  background: rgba(3, 3, 8, 0.3);
+  border: 1px solid rgba(255, 237, 213, 0.09);
+  border-radius: 10px;
+}
+
+.gh-layout-controls,
+.gh-side-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.gh-layout-btn {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  height: 40px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: rgba(255, 239, 219, 0.56);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font: 600 9px / 1 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.16s var(--ease-out),
+    background 0.16s var(--ease-out),
+    box-shadow 0.16s var(--ease-out);
+}
+
+.gh-layout-btn::after {
+  position: absolute;
+  inset: -2px;
+  content: "";
+}
+
+.gh-layout-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.gh-layout-btn:hover,
+.gh-layout-btn:focus-visible {
+  color: #fff7ed;
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.gh-layout-btn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(239, 159, 79, 0.65);
+}
+
+.gh-layout-btn.is-active {
+  color: #ffd29b;
+  background: rgba(224, 151, 82, 0.17);
+  box-shadow: inset 0 0 0 1px rgba(240, 191, 131, 0.16);
+}
+
+.gh-side-btn {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  height: 40px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  color: rgba(255, 239, 219, 0.56);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font: 600 9px / 1 var(--font);
+  cursor: pointer;
+  transition:
+    color 0.16s var(--ease-out),
+    background 0.16s var(--ease-out),
+    box-shadow 0.16s var(--ease-out);
+}
+
+.gh-side-btn::after {
+  position: absolute;
+  inset: -2px;
+  content: "";
+}
+
+.gh-side-btn:hover,
+.gh-side-btn:focus-visible {
+  color: #fff7ed;
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.gh-side-btn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(239, 159, 79, 0.65);
+}
+
+.gh-side-btn.is-active {
+  color: #ffd29b;
+  background: rgba(224, 151, 82, 0.17);
+  box-shadow: inset 0 0 0 1px rgba(240, 191, 131, 0.16);
+}
+
+.gh-vertical-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(231, 175, 104, 0.1), transparent 54%),
+    rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 237, 213, 0.08);
+  border-radius: 10px;
+}
+
+.gh-vertical-tuning {
+  display: grid;
+  width: 96px;
+  grid-template-columns: repeat(6, 1fr);
+  color: rgba(241, 199, 146, 0.76);
+  font: 650 7px / 1 var(--font-mono);
+  text-align: center;
+}
+
+.gh-position-map {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 7px;
+}
+
+.gh-fretboard {
+  position: relative;
+  width: 96px;
+  height: 190px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.016) 0,
+      rgba(255, 255, 255, 0.016) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(90deg, #2a170f, #5a3420 50%, #301a12);
+  border: 1px solid rgba(242, 197, 143, 0.18);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 20px rgba(0, 0, 0, 0.36),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.gh-fret {
+  position: absolute;
+  top: var(--gh-fret-pos);
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(180deg, rgba(45, 31, 24, 0.76), rgba(239, 218, 193, 0.74));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.52);
+}
+
+.gh-string {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--gh-string-pos);
+  width: var(--gh-string-width, 1px);
+  background: linear-gradient(90deg, #fff8e7, #96765a);
+  box-shadow: 1px 0 1px rgba(0, 0, 0, 0.58);
+  transform: translateX(-50%);
+}
+
+.gh-string--1 {
+  --gh-string-pos: 12%;
+  --gh-string-width: 2.2px;
+}
+.gh-string--2 {
+  --gh-string-pos: 27%;
+  --gh-string-width: 1.9px;
+}
+.gh-string--3 {
+  --gh-string-pos: 42%;
+  --gh-string-width: 1.6px;
+}
+.gh-string--4 {
+  --gh-string-pos: 58%;
+  --gh-string-width: 1.3px;
+}
+.gh-string--5 {
+  --gh-string-pos: 73%;
+  --gh-string-width: 1px;
+}
+.gh-string--6 {
+  --gh-string-pos: 88%;
+  --gh-string-width: 0.8px;
+}
+
+.gh-marker {
+  position: absolute;
+  top: var(--gh-marker-pos);
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 237, 213, 0.34);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.gh-touch-dot {
+  position: absolute;
+  top: var(--gh-dot-fret-pos, 70%);
+  left: var(--gh-dot-string-pos, 42%);
+  width: 12px;
+  height: 12px;
+  background: var(--gh-dot-color, #f3a65d);
+  border: 2px solid rgba(255, 250, 242, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--gh-dot-color, #f3a65d) 18%, transparent);
+  transform: translate(-50%, -50%);
+  transition:
+    top 0.16s var(--ease-out),
+    left 0.16s var(--ease-out),
+    background 0.16s var(--ease-out);
+}
+
+.gh-fret-labels {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 190px;
+  flex: 0 0 14px;
+  color: #ef9f4f;
+  font: 650 8px / 1 var(--font-mono);
+}
+
+.gh-fret-labels span {
+  position: absolute;
+  top: var(--gh-fret-label-pos);
+  left: 0;
+  transform: translateY(-50%);
+}
+
+@media (min-width: 641px) {
+  body.visualization-guitar.guitar-guide-horizontal #guitar-surface {
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100% !important;
+    height: calc(100% - 200px) !important;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal .guitar-accessibility-grid {
+    right: 0;
+    bottom: 200px;
+    left: 0;
+    width: 100%;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal #guitar-empty-state {
+    left: 50%;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal #key-hint {
+    top: auto;
+    right: calc(var(--guitar-guide-gutter) + env(safe-area-inset-right));
+    bottom: calc(var(--guitar-guide-gutter) + env(safe-area-inset-bottom));
+    left: calc(var(--guitar-guide-gutter) + env(safe-area-inset-left));
+    width: auto;
+    height: 180px;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-body {
+    display: grid;
+    width: 100%;
+    height: 180px;
+    grid-template-columns: minmax(330px, 0.85fr) minmax(390px, 1.05fr) minmax(520px, 1.65fr);
+    grid-template-rows: 1fr;
+    align-items: stretch;
+    gap: 0;
+    padding: 10px 12px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 10% 30%, rgba(103, 57, 31, 0.22), transparent 27%),
+      linear-gradient(105deg, rgba(30, 20, 18, 0.98), rgba(7, 7, 12, 0.99) 53%);
+    border-color: rgba(225, 158, 90, 0.48);
+    border-radius: 18px;
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 226, 191, 0.08);
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-head {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    grid-template-rows: 42px 56px;
+    align-content: center;
+    gap: 7px 10px;
+    min-height: 0;
+    padding: 0 20px 0 2px;
+    border-right: 1px solid rgba(236, 178, 112, 0.16);
+    border-bottom: 0;
+  }
+
+  body.guitar-guide-horizontal .gh-heading-icon {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  body.guitar-guide-horizontal .gh-heading-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  body.guitar-guide-horizontal .gh-kicker {
+    color: #efb978;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+  }
+  body.guitar-guide-horizontal .gh-control-cluster {
+    grid-column: 1 / 4;
+    grid-row: 2;
+    width: 100%;
+  }
+  body.guitar-guide-horizontal .gh-layout-controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    background: rgba(3, 3, 8, 0.46);
+    border-color: rgba(236, 178, 112, 0.14);
+    border-radius: 12px;
+  }
+  body.guitar-guide-horizontal .gh-layout-btn {
+    height: 52px;
+    gap: 8px;
+    border-radius: 9px;
+    font-size: 11px;
+  }
+  body.guitar-guide-horizontal .gh-layout-btn.is-active {
+    color: #ffe0b6;
+    background: linear-gradient(140deg, rgba(115, 69, 38, 0.72), rgba(65, 38, 27, 0.78));
+    box-shadow:
+      inset 0 0 0 1px rgba(239, 159, 79, 0.35),
+      inset 0 1px 0 rgba(255, 236, 211, 0.08);
+  }
+  body.guitar-guide-horizontal .kh-close {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: center;
+    gap: 7px;
+    padding: 0 24px;
+    border-right: 0;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item {
+    display: inline-flex;
+    width: auto;
+    min-width: 0;
+    min-height: 74px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 6px 9px;
+    color: rgba(255, 242, 226, 0.52);
+    border-radius: 11px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item:hover,
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item:focus-visible {
+    color: #fff7ed;
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 237, 213, 0.08);
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item.is-active {
+    position: relative;
+    color: #ffe0b6;
+    background: linear-gradient(145deg, rgba(92, 54, 33, 0.64), rgba(45, 27, 22, 0.7));
+    border-color: rgba(236, 178, 112, 0.2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 232, 203, 0.07),
+      0 8px 18px rgba(0, 0, 0, 0.16);
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item.is-active::after {
+    position: absolute;
+    right: 9px;
+    bottom: -1px;
+    left: 9px;
+    height: 2px;
+    background: #ef9f4f;
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(239, 159, 79, 0.36);
+    content: "";
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item:nth-child(n),
+  body.guitar-guide-horizontal .kh--guitar .gh-panel {
+    grid-row: 1 !important;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-panel {
+    grid-column: 3;
+    min-height: 0;
+    padding: 14px 10px 14px 30px;
+    overflow: auto;
+    background: transparent;
+    border: 0;
+    border-left: 2px solid #ef9f4f;
+    border-radius: 0;
+    box-shadow: -8px 0 22px rgba(239, 159, 79, 0.08);
+  }
+
+  body.guitar-guide-horizontal .gh-position-inspector {
+    display: grid;
+    height: 100%;
+    grid-template-columns: minmax(240px, 0.66fr) minmax(250px, 1.34fr);
+    align-items: center;
+    gap: 8px 14px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: 100%;
+    padding: 0 16px 0 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.guitar-guide-horizontal .gh-position-current strong {
+    color: #ffd69f;
+    font-size: 42px;
+    text-shadow: 0 0 18px rgba(239, 159, 79, 0.12);
+  }
+
+  body.guitar-guide-horizontal .gh-live-eyebrow,
+  body.guitar-guide-horizontal .gh-visible-range > span {
+    color: #d8a66f;
+    font-size: 8px;
+    letter-spacing: 0.16em;
+    white-space: nowrap;
+  }
+
+  body.guitar-guide-horizontal .gh-visible-range {
+    min-width: 76px;
+    gap: 7px;
+    padding-left: 14px;
+    border-left-color: rgba(239, 159, 79, 0.18);
+  }
+
+  body.guitar-guide-horizontal .gh-visible-range strong {
+    color: #ffe0ae;
+    font-size: 20px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-list {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    overflow-x: auto;
+  }
+
+  body.guitar-guide-horizontal .gh-position-row {
+    min-width: 104px;
+    min-height: 76px;
+    grid-template-columns: 10px minmax(0, 1fr) 14px;
+    grid-template-rows: auto auto;
+    align-content: center;
+    gap: 7px 6px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.025);
+    border-color: rgba(236, 178, 112, 0.13);
+    border-radius: 11px;
+    box-shadow: inset 0 1px 0 rgba(255, 244, 232, 0.025);
+  }
+
+  body.guitar-guide-horizontal .gh-position-row:not(:has(.gh-position-outside)) {
+    grid-template-columns: 10px minmax(0, 1fr);
+  }
+
+  body.guitar-guide-horizontal .gh-position-row > .gh-position-dot {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body.guitar-guide-horizontal .gh-position-row > strong {
+    grid-column: 2;
+    grid-row: 1;
+    color: #fff4e7;
+    font-size: 12px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-coordinates {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    justify-content: flex-start;
+    gap: 7px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-coordinates > span {
+    padding: 0;
+    color: rgba(255, 239, 219, 0.5);
+    background: transparent;
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  body.guitar-guide-horizontal .gh-position-outside {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  body.guitar-guide-horizontal .gh-position-empty {
+    min-height: 76px;
+    background: rgba(255, 255, 255, 0.018);
+    border-color: rgba(236, 178, 112, 0.13);
+    border-radius: 11px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-context {
+    display: none;
+  }
+
+  body.guitar-guide-horizontal .gh-detail,
+  body.guitar-guide-horizontal .gh-actions {
+    min-height: 0;
+    height: 100%;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal #hud.hud--play {
+    left: 14px;
+  }
+
+  body.visualization-guitar.guitar-guide-vertical.guitar-guide-side-right #guitar-surface {
+    right: calc(var(--guitar-guide-rail-w) + var(--guitar-guide-gutter));
+    left: 0;
+    width: calc(100% - var(--guitar-guide-rail-w) - var(--guitar-guide-gutter)) !important;
+  }
+
+  body.visualization-guitar.guitar-guide-vertical.guitar-guide-side-right #key-hint {
+    right: calc(var(--guitar-guide-gutter) + env(safe-area-inset-right));
+    left: auto;
+  }
+
+  body.visualization-guitar.guitar-guide-vertical.guitar-guide-side-right #guitar-empty-state {
+    left: calc((100% - var(--guitar-guide-rail-w) - var(--guitar-guide-gutter)) / 2);
+  }
+
+  body.visualization-guitar.guitar-guide-vertical.guitar-guide-side-right #hud.hud--play {
+    right: calc(var(--guitar-guide-rail-w) + var(--guitar-guide-gutter) + 14px);
+    left: 14px;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px;
+    background:
+      radial-gradient(circle at 76% 3%, rgba(118, 67, 37, 0.24), transparent 30%),
+      linear-gradient(160deg, rgba(29, 21, 19, 0.99), rgba(8, 8, 13, 0.99) 62%);
+    border-color: rgba(225, 158, 90, 0.46);
+    border-radius: 18px;
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.52),
+      inset 0 1px 0 rgba(255, 226, 191, 0.08);
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-head {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 34px;
+    grid-template-rows: 40px auto;
+    gap: 8px 8px;
+    min-height: 141px;
+    padding: 0 1px 9px;
+    border-bottom: 1px solid rgba(236, 178, 112, 0.14);
+  }
+
+  body.guitar-guide-vertical .gh-heading-icon {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    grid-column: 1;
+    grid-row: 1;
+    color: #f3b769;
+    background: linear-gradient(145deg, rgba(91, 53, 32, 0.68), rgba(37, 26, 23, 0.76));
+    border-color: rgba(236, 178, 112, 0.2);
+  }
+  body.guitar-guide-vertical .gh-heading-copy {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: center;
+  }
+  body.guitar-guide-vertical .gh-kicker {
+    color: #efb978;
+    font-size: 8.5px;
+    letter-spacing: 0.17em;
+  }
+  body.guitar-guide-vertical .kh-close {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  body.guitar-guide-vertical .gh-control-cluster {
+    display: grid;
+    grid-column: 1 / 4;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    width: 100%;
+  }
+  body.guitar-guide-vertical .gh-layout-controls,
+  body.guitar-guide-vertical .gh-side-controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    background: rgba(3, 3, 8, 0.44);
+    border-color: rgba(236, 178, 112, 0.14);
+    border-radius: 10px;
+  }
+
+  body.guitar-guide-vertical .gh-layout-btn,
+  body.guitar-guide-vertical .gh-side-btn {
+    height: 40px;
+    font-size: 9.5px;
+  }
+
+  body.guitar-guide-vertical .gh-layout-btn.is-active,
+  body.guitar-guide-vertical .gh-side-btn.is-active {
+    color: #ffe0b6;
+    background: linear-gradient(140deg, rgba(115, 69, 38, 0.72), rgba(65, 38, 27, 0.78));
+    box-shadow:
+      inset 0 0 0 1px rgba(239, 159, 79, 0.3),
+      inset 0 1px 0 rgba(255, 236, 211, 0.07);
+  }
+
+  body.guitar-guide-vertical .gh-layout-btn.is-active::before,
+  body.guitar-guide-vertical .gh-side-btn.is-active::before {
+    position: absolute;
+    right: 7px;
+    bottom: -1px;
+    left: 7px;
+    height: 2px;
+    background: #ef9f4f;
+    border-radius: 2px;
+    box-shadow: 0 0 9px rgba(239, 159, 79, 0.34);
+    content: "";
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav-item {
+    display: inline-flex;
+    width: auto;
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 7px;
+    padding: 4px 7px;
+    color: rgba(255, 242, 226, 0.58);
+    background: rgba(3, 3, 8, 0.28);
+    border-color: rgba(236, 178, 112, 0.12);
+    border-radius: 10px;
+    font-size: 9.5px;
+    text-align: center;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav-item.is-active {
+    position: relative;
+    color: #ffe0b6;
+    background: linear-gradient(145deg, rgba(92, 54, 33, 0.74), rgba(45, 27, 22, 0.78));
+    border-color: rgba(236, 178, 112, 0.26);
+    box-shadow:
+      inset 2px 0 0 #ef9f4f,
+      inset 0 1px 0 rgba(255, 232, 203, 0.07),
+      0 7px 16px rgba(0, 0, 0, 0.16);
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-nav-item:nth-child(n),
+  body.guitar-guide-vertical .kh--guitar .gh-panel {
+    grid-row: auto !important;
+  }
+
+  body.guitar-guide-vertical .kh--guitar .gh-panel {
+    flex: 1 1 auto;
+    padding: 8px;
+    overflow-y: auto;
+    background: rgba(3, 3, 8, 0.26);
+    border-color: rgba(236, 178, 112, 0.12);
+    border-radius: 12px;
+  }
+
+  body.guitar-guide-vertical .gh-position-inspector {
+    gap: 8px;
+  }
+
+  body.guitar-guide-vertical .gh-vertical-visual {
+    gap: 8px;
+    padding: 10px 9px;
+    background:
+      radial-gradient(circle at 50% 20%, rgba(231, 175, 104, 0.11), transparent 54%),
+      linear-gradient(155deg, rgba(35, 23, 19, 0.7), rgba(3, 3, 8, 0.48));
+    border-color: rgba(236, 178, 112, 0.16);
+    border-radius: 11px;
+    box-shadow: inset 0 1px 0 rgba(255, 231, 199, 0.035);
+  }
+
+  body.guitar-guide-vertical .gh-vertical-tuning,
+  body.guitar-guide-vertical .gh-fretboard {
+    width: 136px;
+  }
+
+  body.guitar-guide-vertical .gh-vertical-tuning {
+    color: #e7b678;
+    font-size: 8px;
+  }
+
+  body.guitar-guide-vertical .gh-fretboard {
+    height: 248px;
+    border-color: rgba(242, 197, 143, 0.28);
+    border-radius: 7px;
+    box-shadow:
+      inset 0 0 28px rgba(0, 0, 0, 0.42),
+      0 7px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  body.guitar-guide-vertical .gh-fret-labels {
+    width: 18px;
+    height: 248px;
+    flex-basis: 18px;
+    color: #f0aa57;
+    font-size: 8.5px;
+  }
+
+  body.guitar-guide-vertical .gh-touch-dot {
+    width: 14px;
+    height: 14px;
+  }
+
+  body.guitar-guide-vertical .gh-position-hero {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 10px 10px 10px 14px;
+    background: linear-gradient(105deg, rgba(73, 43, 28, 0.34), rgba(255, 255, 255, 0.025));
+    border-color: rgba(236, 178, 112, 0.18);
+    border-radius: 10px;
+  }
+
+  body.guitar-guide-vertical .gh-position-hero::before {
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: 2px;
+    width: 2px;
+    background: #ef9f4f;
+    border-radius: 2px;
+    box-shadow: 0 0 9px rgba(239, 159, 79, 0.35);
+    content: "";
+  }
+
+  body.guitar-guide-vertical .gh-position-current strong {
+    color: #ffd69f;
+    font-size: 31px;
+  }
+
+  body.guitar-guide-vertical .gh-visible-range {
+    align-items: flex-start;
+    gap: 5px;
+    padding-top: 0;
+    padding-left: 10px;
+    border-top: 0;
+    border-left: 1px solid rgba(239, 159, 79, 0.16);
+  }
+
+  body.guitar-guide-vertical .gh-visible-range strong {
+    color: #ffe0ae;
+    font-size: 15px;
+  }
+
+  body.guitar-guide-vertical .gh-position-list {
+    max-height: 128px;
+    gap: 6px;
+    overflow-y: auto;
+  }
+
+  body.guitar-guide-vertical .gh-position-row {
+    min-height: 42px;
+    padding-inline: 8px;
+    background: rgba(255, 255, 255, 0.026);
+    border-color: rgba(236, 178, 112, 0.13);
+    border-radius: 9px;
+  }
+}
+
+@media (max-width: 640px) {
+  .gh-control-cluster,
+  .gh-vertical-visual {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1050px) {
+  body.visualization-guitar.guitar-guide-horizontal #guitar-surface {
+    height: calc(100% - 220px) !important;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal .guitar-accessibility-grid {
+    bottom: 220px;
+  }
+
+  body.visualization-guitar.guitar-guide-horizontal #key-hint,
+  body.guitar-guide-horizontal .kh--guitar .gh-body {
+    height: 200px;
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-body {
+    grid-template-columns: 250px 270px minmax(0, 1fr);
+  }
+
+  body.guitar-guide-horizontal .gh-position-inspector {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 6px;
+  }
+
+  body.guitar-guide-horizontal .gh-position-list {
+    min-height: 38px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 760px) {
+  body.guitar-guide-horizontal .kh--guitar .gh-body {
+    grid-template-columns: 220px 180px minmax(170px, 1fr);
+  }
+
+  body.guitar-guide-horizontal .kh--guitar .gh-nav-item {
+    flex-direction: column;
+    gap: 3px;
+    padding-inline: 2px;
+    font-size: 7px;
+  }
 }

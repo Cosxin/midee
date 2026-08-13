@@ -110,8 +110,14 @@ export interface KeyHintProps {
   guitarActiveVoices: () => readonly SurfaceActiveVoice[]
   guitarFretboardViewport: () => SurfaceFretboardViewport | null
   guitarChordName: () => string
+  guitarGuideOrientation: () => GuitarGuideOrientation
+  guitarGuideSide: () => GuitarGuideSide
+  onGuitarGuideOrientation: (orientation: GuitarGuideOrientation) => void
+  onGuitarGuideSide: (side: GuitarGuideSide) => void
 }
 
+export type GuitarGuideOrientation = 'horizontal' | 'vertical'
+export type GuitarGuideSide = 'left' | 'right'
 type PositionedGuitarVoice = SurfaceActiveVoice & { string: number; fret: number }
 
 export function getGuitarGuideFretRange(viewport: SurfaceFretboardViewport): {
@@ -651,7 +657,32 @@ export function KeyHintView(props: KeyHintProps) {
   const guideViewport = (): SurfaceFretboardViewport =>
     props.guitarFretboardViewport() ?? { startFret: 0, fretSpan: 12 }
   const visibleFretRange = () => getGuitarGuideFretRange(guideViewport())
+  const guideFretLabels = () => {
+    const viewport = guideViewport()
+    const first = Math.max(0, Math.ceil(viewport.startFret))
+    const last = Math.min(24, Math.floor(viewport.startFret + viewport.fretSpan))
+    return Array.from(
+      { length: Math.max(0, last - first + 1) },
+      (_, index) => first + index,
+    ).filter((fret) => fret === 0 || [3, 5, 7, 9, 12, 15, 17, 19, 21, 24].includes(fret))
+  }
+  const guideFretBoundaries = () => {
+    const viewport = guideViewport()
+    const first = Math.max(0, Math.ceil(viewport.startFret))
+    const last = Math.min(24, Math.floor(viewport.startFret + viewport.fretSpan))
+    return Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => first + index)
+  }
+  const fretBoundaryPosition = (fret: number): number => {
+    const viewport = guideViewport()
+    return ((fret - viewport.startFret) / viewport.fretSpan) * 100
+  }
+  const fretPosition = (fret: number): number => {
+    const viewport = guideViewport()
+    return ((fret - viewport.startFret + 0.5) / viewport.fretSpan) * 100
+  }
   const positionDotStyle = (voice: PositionedGuitarVoice) => ({
+    '--gh-dot-string-pos': `${12 + voice.string * 15.2}%`,
+    '--gh-dot-fret-pos': `${fretPosition(voice.fret)}%`,
     '--gh-dot-color': `#${voice.color.toString(16).padStart(6, '0')}`,
   })
   const activePositionLabel = (): string => {
@@ -793,6 +824,68 @@ export function KeyHintView(props: KeyHintProps) {
             <span class="gh-heading-copy">
               <span class="gh-kicker">{t('guitarGuide.mobileLabel')}</span>
             </span>
+            <div class="gh-control-cluster">
+              <fieldset class="gh-control-group gh-layout-controls">
+                <legend class="sr-visually-hidden">{t('guitarGuide.layout')}</legend>
+                <button
+                  class="gh-layout-btn"
+                  classList={{ 'is-active': props.guitarGuideOrientation() === 'horizontal' }}
+                  type="button"
+                  aria-pressed={props.guitarGuideOrientation() === 'horizontal'}
+                  aria-label={t('guitarGuide.horizontal')}
+                  data-tip={t('guitarGuide.horizontal')}
+                  onClick={() => props.onGuitarGuideOrientation('horizontal')}
+                >
+                  <span
+                    class="gh-layout-icon"
+                    aria-hidden="true"
+                    innerHTML={icons.layoutHorizontal(15)}
+                  />
+                  <span>{t('guitarGuide.horizontalShort')}</span>
+                </button>
+                <button
+                  class="gh-layout-btn"
+                  classList={{ 'is-active': props.guitarGuideOrientation() === 'vertical' }}
+                  type="button"
+                  aria-pressed={props.guitarGuideOrientation() === 'vertical'}
+                  aria-label={t('guitarGuide.vertical')}
+                  data-tip={t('guitarGuide.vertical')}
+                  onClick={() => props.onGuitarGuideOrientation('vertical')}
+                >
+                  <span
+                    class="gh-layout-icon"
+                    aria-hidden="true"
+                    innerHTML={icons.layoutVertical(15)}
+                  />
+                  <span>{t('guitarGuide.verticalShort')}</span>
+                </button>
+              </fieldset>
+              <Show when={props.guitarGuideOrientation() === 'vertical'}>
+                <fieldset class="gh-control-group gh-side-controls">
+                  <legend class="sr-visually-hidden">{t('guitarGuide.side')}</legend>
+                  <button
+                    class="gh-side-btn"
+                    classList={{ 'is-active': props.guitarGuideSide() === 'left' }}
+                    type="button"
+                    aria-pressed={props.guitarGuideSide() === 'left'}
+                    aria-label={t('guitarGuide.moveLeft')}
+                    onClick={() => props.onGuitarGuideSide('left')}
+                  >
+                    {t('guitarGuide.left')}
+                  </button>
+                  <button
+                    class="gh-side-btn"
+                    classList={{ 'is-active': props.guitarGuideSide() === 'right' }}
+                    type="button"
+                    aria-pressed={props.guitarGuideSide() === 'right'}
+                    aria-label={t('guitarGuide.moveRight')}
+                    onClick={() => props.onGuitarGuideSide('right')}
+                  >
+                    {t('guitarGuide.right')}
+                  </button>
+                </fieldset>
+              </Show>
+            </div>
             <button
               class="kh-close"
               id="kh-close"
@@ -815,6 +908,62 @@ export function KeyHintView(props: KeyHintProps) {
             <Switch>
               <Match when={guitarSection() === 'position'}>
                 <div class="gh-position-inspector">
+                  <Show when={props.guitarGuideOrientation() === 'vertical'}>
+                    <div class="gh-vertical-visual">
+                      <div class="gh-vertical-tuning" aria-hidden="true">
+                        <span>E</span>
+                        <span>A</span>
+                        <span>D</span>
+                        <span>G</span>
+                        <span>B</span>
+                        <span>E</span>
+                      </div>
+                      <div class="gh-position-map" aria-hidden="true">
+                        <div class="gh-fretboard">
+                          <For each={guideFretBoundaries()}>
+                            {(fret) => (
+                              <span
+                                class="gh-fret"
+                                style={{ '--gh-fret-pos': `${fretBoundaryPosition(fret)}%` }}
+                              />
+                            )}
+                          </For>
+                          <span class="gh-string gh-string--1" />
+                          <span class="gh-string gh-string--2" />
+                          <span class="gh-string gh-string--3" />
+                          <span class="gh-string gh-string--4" />
+                          <span class="gh-string gh-string--5" />
+                          <span class="gh-string gh-string--6" />
+                          <For each={guideFretLabels().filter((fret) => fret > 0)}>
+                            {(fret) => (
+                              <span
+                                class="gh-marker"
+                                style={{ '--gh-marker-pos': `${fretPosition(fret)}%` }}
+                              />
+                            )}
+                          </For>
+                          <For
+                            each={positionedVoices().filter((voice) =>
+                              isGuitarVoiceInViewport(voice, guideViewport()),
+                            )}
+                          >
+                            {(voice) => (
+                              <span class="gh-touch-dot" style={positionDotStyle(voice)} />
+                            )}
+                          </For>
+                        </div>
+                        <span class="gh-fret-labels">
+                          <For each={guideFretLabels()}>
+                            {(fret) => (
+                              <span style={{ '--gh-fret-label-pos': `${fretPosition(fret)}%` }}>
+                                {fret}
+                              </span>
+                            )}
+                          </For>
+                        </span>
+                      </div>
+                    </div>
+                  </Show>
                   <div class="gh-position-hero">
                     <span class="gh-position-current">
                       <span class="gh-live-eyebrow">{t('guitarGuide.nowPlaying')}</span>

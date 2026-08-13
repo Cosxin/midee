@@ -37,6 +37,7 @@ interface CachedState {
   practicePending: ReadonlySet<VisualizationHitId> | null
   practiceAccepted: ReadonlySet<VisualizationHitId> | null
   practiceTrackIds: readonly string[] | null
+  guitarFretboardVisible: boolean
   resize: { width: number; height: number; resolution?: number } | null
   trackVisibility: Map<string, boolean>
 }
@@ -52,6 +53,7 @@ function emptyCache(): CachedState {
     practicePending: null,
     practiceAccepted: null,
     practiceTrackIds: null,
+    guitarFretboardVisible: true,
     resize: null,
     trackVisibility: new Map(),
   }
@@ -251,6 +253,7 @@ export class SurfaceRouter implements VisualizationSurface {
     if (c.theme) surface.setTheme(c.theme)
     surface.setPracticeHints(c.practicePending, c.practiceAccepted)
     surface.setPracticeTrackFocus(c.practiceTrackIds)
+    surface.setGuitarFretboardVisible?.(c.guitarFretboardVisible)
     for (const [trackId, visible] of c.trackVisibility) surface.setTrackVisible(trackId, visible)
     // Replays the last resize this router was told about so a surface built
     // long after boot (guitar, on first switch) starts with correct geometry
@@ -488,5 +491,10 @@ export class SurfaceRouter implements VisualizationSurface {
     this.desiredVisible = visible
     this.active.setVisible(visible)
     document.body.classList.toggle('canvas-hidden', !visible)
+  }
+
+  setGuitarFretboardVisible(visible: boolean): void {
+    this.cached.guitarFretboardVisible = visible
+    this.guitar?.setGuitarFretboardVisible?.(visible)
   }
 }

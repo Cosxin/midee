@@ -113,6 +113,7 @@ function fakeSurface(
     pauseAutoRender: vi.fn(),
     resumeAutoRender: vi.fn(),
     setVisible: vi.fn(),
+    setGuitarFretboardVisible: vi.fn(),
     setPracticeHints: vi.fn(),
     setPracticeTrackFocus: vi.fn(),
     addLayer: vi.fn(),
@@ -201,6 +202,17 @@ describe('SurfaceRouter', () => {
 
       expect(guitarFactory).toHaveBeenCalledTimes(1)
       expect(router.currentMode).toBe('guitar')
+    })
+
+    it('replays the chosen fretboard presentation before a lazy guitar is promoted', async () => {
+      const piano = fakeSurface('piano')
+      const guitar = fakeSurface('guitar')
+      const router = new SurfaceRouter(piano, async () => guitar)
+
+      router.setGuitarFretboardVisible(false)
+      await router.setMode('guitar', 0)
+
+      expect(guitar.setGuitarFretboardVisible).toHaveBeenCalledWith(false)
     })
   })
 

@@ -341,6 +341,8 @@ export class GuitarSurface implements VisualizationSurface {
   private activity = new GuitarRenderActivity()
   private clock: MasterClock | null = null
   private canvasResizeObserver: ResizeObserver | null = null
+  private surfaceVisible = true
+  private fretboardVisible = true
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -484,11 +486,21 @@ export class GuitarSurface implements VisualizationSurface {
   // exclusively (it's the only thing that knows whether the *active* surface
   // is hidden; this surface doesn't know if it's even the active one).
   setVisible(visible: boolean): void {
+    this.surfaceVisible = visible
     this.app.stage.visible = visible
     applyGuitarCanvasVisibility(this.app.canvas as HTMLCanvasElement, visible)
-    this.accessibilityGrid.setVisible(visible)
+    this.accessibilityGrid.setVisible(visible && this.fretboardVisible)
     if (!visible) this.cleanupGestures()
     if (visible) this.renderStaticFrame(this.lastTime)
+  }
+
+  setGuitarFretboardVisible(visible: boolean): void {
+    if (visible === this.fretboardVisible) return
+    this.fretboardVisible = visible
+    this.accessibilityGrid.setVisible(this.surfaceVisible && visible)
+    if (!visible) this.cleanupGestures()
+    this.renderStaticFrame(this.lastTime)
+    this.wake()
   }
 
   setPracticeHints(
@@ -668,7 +680,7 @@ export class GuitarSurface implements VisualizationSurface {
       child.destroy()
     })
     this.drawHighway(g, currentTime)
-    this.drawFretboard(g)
+    if (this.fretboardVisible) this.drawFretboard(g)
 
     const fretboardViewport = {
       startFret: this.panX / this.layout.fretWidth,
@@ -691,10 +703,11 @@ export class GuitarSurface implements VisualizationSurface {
         color,
         ...(voice.position ? { string: voice.position.string, fret: voice.position.fret } : {}),
       })
-      if (voice.position) this.drawActivePosition(g, voice.position, color)
-      else this.drawUnsupported(g, voice, color, unsupportedRow++)
+      if (voice.position) {
+        if (this.fretboardVisible) this.drawActivePosition(g, voice.position, color)
+      } else this.drawUnsupported(g, voice, color, unsupportedRow++)
     }
-    this.drawPracticeHints(g, active)
+    if (this.fretboardVisible) this.drawPracticeHints(g, active)
     const activeVoiceSignature = activeVoices
       .map((voice) => `${voice.pitch}:${voice.string ?? '-'}:${voice.fret ?? '-'}:${voice.color}`)
       .join('|')
@@ -703,25 +716,26 @@ export class GuitarSurface implements VisualizationSurface {
       this.activeVoices.set(activeVoices)
     }
     this.activeKeys.set(colors)
-    this.accessibilityGrid.updateGeometry(this.layout, this.panX)
+    if (this.fretboardVisible) this.accessibilityGrid.updateGeometry(this.layout, this.panX)
   }
 
   private drawHighway(g: Graphics, currentTime: number): void {
-    g.rect(0, 0, this.layout.width, this.layout.highwayHeight).fill({
+    const highwayHeight = this.fretboardVisible ? this.layout.highwayHeight : this.layout.height
+    g.rect(0, 0, this.layout.width, highwayHeight).fill({
       color: this.theme.background,
     })
 
     const laneWidth = this.layout.width / GUITAR_STRING_COUNT
     const headerY = this.highwayHeaderY()
-    const lineTop = Math.min(this.layout.highwayHeight - 18, headerY + 18)
-    const nowY = this.layout.highwayHeight - 12
+    const lineTop = Math.min(highwayHeight - 18, headerY + 18)
+    const nowY = highwayHeight - 12
     const travelTop = Math.min(nowY - 1, headerY + 28)
 
     // Alternating lane washes and time guides make dense passages easier to
     // scan without competing with the track colors used for actual notes.
     for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
       if (string % 2 === 0) {
-        g.rect(string * laneWidth, 0, laneWidth, this.layout.highwayHeight).fill({
+        g.rect(string * laneWidth, 0, laneWidth, highwayHeight).fill({
           color: this.theme.whiteKey,
           alpha: 0.012,
         })
@@ -739,7 +753,7 @@ export class GuitarSurface implements VisualizationSurface {
     for (let string = 0; string < GUITAR_STRING_COUNT; string++) {
       const x = highwayLaneX(string, this.layout)
       const stringWidth = 1 + (GUITAR_STRING_COUNT - 1 - string) * 0.2
-      g.moveTo(x, lineTop).lineTo(x, this.layout.highwayHeight).stroke({
+      g.moveTo(x, lineTop).lineTo(x, highwayHeight).stroke({
         color: this.theme.whiteKey,
         alpha: 0.22,
         width: stringWidth,
@@ -995,7 +1009,8 @@ export class GuitarSurface implements VisualizationSurface {
     y?: number,
   ): void {
     const railX = this.layout.width - 14
-    const railY = Math.min(this.layout.highwayHeight - 18, (y ?? this.highwayHeaderY()) + row * 18)
+    const highwayHeight = this.fretboardVisible ? this.layout.highwayHeight : this.layout.height
+    const railY = Math.min(highwayHeight - 18, (y ?? this.highwayHeaderY()) + row * 18)
     g.circle(railX, railY, 6).fill({ color, alpha: 0.7 })
     g.moveTo(railX - 4, railY - 4)
       .lineTo(railX + 4, railY + 4)
@@ -1012,16 +1027,13 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private highwayHeaderY(): number {
+    const highwayHeight = this.fretboardVisible ? this.layout.highwayHeight : this.layout.height
     const mobilePortrait = this.layout.width <= 640 && this.layout.height >= this.layout.width
     const minimum = mobilePortrait ? MOBILE_HIGHWAY_HEADER_MIN_Y : HIGHWAY_HEADER_MIN_Y
     const maximum = mobilePortrait ? MOBILE_HIGHWAY_HEADER_MAX_Y : HIGHWAY_HEADER_MAX_Y
     return Math.max(
       0,
-      Math.min(
-        maximum,
-        Math.max(minimum, this.layout.highwayHeight * 0.2),
-        this.layout.highwayHeight - 32,
-      ),
+      Math.min(maximum, Math.max(minimum, highwayHeight * 0.2), highwayHeight - 32),
     )
   }
 
@@ -1076,6 +1088,7 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
+    if (!this.fretboardVisible) return
     this.accessibilityGrid.blur()
     const point = this.localPoint(event)
     const position = positionAtPoint(point.x, point.y, this.layout, this.panX)
@@ -1121,6 +1134,7 @@ export class GuitarSurface implements VisualizationSurface {
   }
 
   private onWheel = (event: WheelEvent): void => {
+    if (!this.fretboardVisible) return
     this.accessibilityGrid.blur()
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) && !event.shiftKey) return
     event.preventDefault()
