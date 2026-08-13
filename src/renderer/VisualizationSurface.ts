@@ -110,6 +110,8 @@ export interface VisualizationSurface {
 
   // ── Visibility ───────────────────────────────────────────────────────
   setVisible(visible: boolean): void
+  /** Guitar-only presentation hook. Other surfaces intentionally omit it. */
+  setGuitarFretboardVisible?(visible: boolean): void
 
   // ── Practice hints / overlay layers ─────────────────────────────────
   setPracticeHints(

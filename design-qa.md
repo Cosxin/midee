@@ -11,6 +11,9 @@
 - Desktop synchronized guide/main fretboard: `/private/tmp/midee-guitar-guide-synced-desktop-final.png`
 - User-reported duplicated Position layout: `/var/folders/wq/8fsr8dfx0zv0vkb9wnc70d_c0000gn/T/orca-paste-1786514569804-00c729d6-879e-4233-8d7d-ebf248acbb36.png`
 - Desktop performance inspector: `/private/tmp/midee-guitar-inspector-desktop-final.png`
+- Desktop horizontal fretboard + bottom details dock: `/private/tmp/midee-guitar-horizontal-1500-final.png`
+- Desktop vertical fretboard + left details rail: `/private/tmp/midee-guitar-vertical-1500-final.png`
+- Reference/horizontal/vertical comparison: `/private/tmp/midee-guitar-orientation-comparison.png`
 - Mobile performance inspector sheet: `/private/tmp/midee-guitar-inspector-mobile-open.png`
 - Equal-size user-report/inspector comparison: `/private/tmp/midee-guitar-layout-comparison-final.png`
 - Desktop playback-follow Chord guide: `/private/tmp/midee-guitar-guide-follow-chord-final.png`
@@ -31,6 +34,7 @@
 - Desktop MIDI state: 1202 x 838 CSS viewport at device scale 1, dark theme, Play mode, Guitar view, Chopin sample loaded, Position guide open, active notes and chord checked.
 - Mobile state: 390 x 844 CSS viewport at device scale 1, dark theme, Live and Play modes, Guitar view, with the compact guide and open Position/Chord sheets checked.
 - Position-inspector comparison: the 2404 x 1610 user screenshot was normalized to 1500 x 1000 and paired with a 1500 x 1000 browser capture at device scale 1. Both show dark-theme MIDI Play, Guitar view, Position open, and sounding notes; playback time and chord differ because both captures are live frames from the same sample.
+- Orientation-switch comparison: the same user screenshot was normalized to 1500 x 1000 and paired with 1500 x 1000 Live captures of both horizontal and vertical modes. Horizontal shows one full neck plus a 118px details dock; vertical shows one compact neck on the selected side and no second canvas fretboard.
 
 ## Full-View Comparison Evidence
 
@@ -108,9 +112,40 @@ The final user-report comparison also shows one spatial fretboard instead of two
 - Post-fix evidence: the equal-size comparison shows the duplicate neck removed and a materially simpler left rail. At 1500 x 1000 the rail is x=7..197 and the document is exactly 1500px wide. At 390 x 844 the open sheet is x=8..382, y=548.375..836, has a 286px content height, and no internal or document overflow.
 - Focused comparison was required because the rail text was too small in the full app view; `/private/tmp/midee-guitar-inspector-desktop-final.png` and `/private/tmp/midee-guitar-inspector-mobile-open.png` confirm legible hierarchy, aligned string/fret chips, bounded rows, and one visible-neck source of truth.
 
+### Iteration 8 - switchable one-fretboard layouts
+
+- P1: a fixed horizontal-only composition could not satisfy players who need a vertical neck without returning to the duplicated left-and-bottom model.
+- P2: the Position details needed to follow the active visualization instead of occupying a separate, competing rail.
+- Fixed with a mutually exclusive Horizontal/Vertical control. Horizontal retains the full interactive canvas neck and docks the guide details immediately below it. Vertical hides that canvas neck and its invisible accessibility hit-grid, expands the six note lanes, and shows one synchronized vertical neck with its details directly underneath.
+- Added a second vertical-only action that swaps the complete guide between left and right. The resized canvas and HUD follow the selected side, while the guide remains outside the note lanes.
+- Post-fix desktop evidence at 1500 x 1000: horizontal canvas x=0..1500 and y=0..862, details dock x=7..1493 and y=875..993; vertical-left canvas x=197..1500 and guide x=7..197; vertical-right canvas x=0..1303 and guide x=1303..1493. Only horizontal exposes the canvas fretboard grid.
+
+### Iteration 9 - control hierarchy and readout space
+
+- P2: the first horizontal dock gave most of its width to four oversized section tabs and compressed the live note readout; the vertical rail relied on small icon-only layout and side actions.
+- Fixed by assigning the dock's widest column to Position details, reducing the section navigation to a centered compact strip, and turning the layout control into a labeled Horizontal/Vertical segmented choice.
+- Replaced the vertical rail's one-way swap icon with explicit Left/Right choices, increased the rail to a readable 188–220px range, and reorganized its sections into a 2 x 2 navigation grid above the single synchronized neck.
+- Post-fix evidence at 1500 x 1000: the horizontal dock columns are 276/361/807px, giving the live readout more than half the dock; the vertical rail is 217.5px wide, its layout and side controls are explicit 40px-high segmented buttons, and its four section targets are 44px high. Right-side switching moves the rail to x=1275.5..1493 while the canvas remains x=0..1275.5.
+
+### Iteration 10 - ImageGen panel reference implementation
+
+- Generated and preserved a dedicated 1919 x 820 horizontal panel reference at `docs/design-references/guitar-guide-panel-imagegen-2026-08-12.png`. The reference uses a precision-instrument console direction: one matte black and walnut enclosure, labeled layout switch, compact navigation, amber calibration line, large serif chord, exact fret range, and aligned active-note chips.
+- P2: the coded dock still read as three adjacent utility blocks rather than one calibrated performance console, and its chord hierarchy was visually weaker than the generated reference.
+- Fixed by increasing the dock to 152px, unifying its dark walnut surface, strengthening its bronze enclosure, giving the selected layout and Position tab tactile wood states, replacing the inspector card border with the reference's vertical amber calibration line, enlarging the live chord/range hierarchy, and reshaping active voices into two-line note chips.
+- Equal-size combined review used the generated reference plus the latest 1500 x 1000 browser capture. The implementation intentionally retains the simulator around the panel and uses real dynamic Bach playback data instead of copying the reference's static `D#M` sample.
+- Post-fix browser evidence: the first verified reference pass placed the horizontal panel at x=7..1493 and y=841..993 with 340/420/700px columns and four 66px tabs; the final legibility pass increases the dock to 180px and its tabs to 74px while keeping the same zero-overflow three-zone composition. Vertical-right remains x=1275.5..1493, canvas x=0..1275.5, Left/Right controls remain 40px high, and the canvas accessibility grid remains hidden in vertical mode.
+
+### Iteration 11 - ImageGen vertical rail reference implementation
+
+- Generated and preserved a second dedicated reference at `docs/design-references/guitar-guide-vertical-panel-imagegen-2026-08-12.png`. The horizontal implementation sheet depicts one complete tall rail with the same matte-black, walnut, bronze, and amber instrument language as the bottom dock.
+- P2: the coded vertical rail had the correct mutually exclusive behavior but still compressed its identity, controls, neck, and live metadata into utility-sized surfaces that did not match the horizontal dock's hierarchy.
+- Fixed by widening the adaptive rail to 218–250px, restoring the fretboard emblem, keeping both two-way switches full width, raising the 2 x 2 guide modes to 48px targets, enlarging the single synchronized neck to 136 x 248px, and placing the chord/range inspector plus note rows in a separated amber-calibrated details stack below it.
+- Orca browser proof at 1500 x 1000: vertical-left rail x=7..247 and canvas x=247..1500; vertical-right rail x=1253..1493 and canvas x=0..1253. The rail is 240px wide on both sides, its content panel is 216px wide without internal scroll, the visual ends at y=656 before the live inspector begins at y=664, and both document overflow axes remain zero.
+- Horizontal regression proof after returning through the visible layout switch: dock x=7..1493 and y=813..993, canvas x=0..1500 and y=0..800, panel scrollHeight equals clientHeight, no vertical visual remains mounted, and both document overflow axes remain zero.
+
 ## Verification
 
-- `npm run check`: passed, 56 files and 690/690 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
+- `npm run check`: passed, 56 files and 692/692 tests. Five pre-existing lint warnings remain; jsdom emits its known Pixi canvas diagnostic while all tests pass.
 - `npx vite build`: passed. Existing chunk-size warnings remain for the Pixi and main bundles.
 - `git diff --check` and `git diff --cached --check`: passed.
 - Orca browser QA: desktop 1202 x 838 and mobile 390 x 844; Live and loaded MIDI Play modes, playback, seek, guide open/close, Position/Chord tabs, changing exact string/fret assignments, active chord, responsive bounds, document overflow, and console checked. Console contains only Vite, Tone.js, and local analytics development logs.
@@ -128,5 +163,8 @@ The final user-report comparison also shows one spatial fretboard instead of two
 - [x] All six locales include the new visible strings.
 - [x] Real wood material, metal frets, markers, and string types match the selected guitar direction.
 - [x] Position does not duplicate the primary fretboard; it explains the live musical state and viewport instead.
+- [x] Horizontal and vertical layouts are mutually exclusive and keyboard-labeled.
+- [x] Vertical layout can swap sides without covering note lanes.
+- [x] Position details follow below the active fretboard visualization.
 
 final result: passed

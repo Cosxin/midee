@@ -15,6 +15,8 @@ import {
   formatMMSS,
   formatSpeed,
   formatTime,
+  type GuitarGuideOrientation,
+  type GuitarGuideSide,
   getMidiMenuLabel,
   getMidiPillLabel,
   HudView,
@@ -169,6 +171,10 @@ export class Controls {
     const initialGuitarGuideSeen = loadGuitarGuideSeen()
     const [guitarKeyHintExpanded, setGuitarKeyHintExpanded] = createSignal(!isNarrowViewport())
     const [guitarGuideSeen, setGuitarGuideSeen] = createSignal(initialGuitarGuideSeen)
+    const [guitarGuideOrientation, setGuitarGuideOrientation] =
+      createSignal<GuitarGuideOrientation>('horizontal')
+    const [guitarGuideSide, setGuitarGuideSide] = createSignal<GuitarGuideSide>('left')
+    const [guitarGuideDesktop, setGuitarGuideDesktop] = createSignal(!isNarrowViewport())
     const [guitarHasActiveNotes, setGuitarHasActiveNotes] = createSignal(
       store.effectiveVisualizationMode === 'guitar' &&
         opts.services.renderer.activeKeys.value.size > 0,
@@ -470,6 +476,10 @@ export class Controls {
             guitarActiveVoices={guitarActiveVoices}
             guitarFretboardViewport={guitarFretboardViewport}
             guitarChordName={guitarChordName}
+            guitarGuideOrientation={guitarGuideOrientation}
+            guitarGuideSide={guitarGuideSide}
+            onGuitarGuideOrientation={setGuitarGuideOrientation}
+            onGuitarGuideSide={setGuitarGuideSide}
           />
         </>
       ),
@@ -529,10 +539,23 @@ export class Controls {
       visualizationMode() === 'guitar' &&
       guitarKeyHintExpanded() &&
       (mode() === 'live' || (mode() === 'play' && hasFile()))
-    document.body.classList.toggle('guitar-guide-open', guideOpen())
-    this.unsubs.push(
-      watch(guideOpen, (open) => document.body.classList.toggle('guitar-guide-open', open)),
-    )
+    const verticalGuideOpen = (): boolean =>
+      guideOpen() && guitarGuideDesktop() && guitarGuideOrientation() === 'vertical'
+    const guidePresentation = (): string =>
+      [guideOpen(), verticalGuideOpen(), guitarGuideSide()].join(':')
+    const syncGuidePresentation = (): void => {
+      const open = guideOpen()
+      const vertical = verticalGuideOpen()
+      const right = vertical && guitarGuideSide() === 'right'
+      document.body.classList.toggle('guitar-guide-open', open)
+      document.body.classList.toggle('guitar-guide-horizontal', open && !vertical)
+      document.body.classList.toggle('guitar-guide-vertical', vertical)
+      document.body.classList.toggle('guitar-guide-side-right', right)
+      document.body.classList.toggle('guitar-guide-side-left', vertical && !right)
+      opts.services.renderer.setGuitarFretboardVisible?.(!vertical)
+    }
+    syncGuidePresentation()
+    this.unsubs.push(watch(guidePresentation, syncGuidePresentation))
 
     // Keep the guide's presentation aligned with its responsive contract when
     // a browser or device crosses the desktop/mobile breakpoint mid-session.
@@ -540,6 +563,7 @@ export class Controls {
     // until the player explicitly asks for the bottom sheet.
     const desktopGuideQuery = window.matchMedia('(min-width: 641px)')
     const syncGuideForViewport = (matches: boolean): void => {
+      setGuitarGuideDesktop(matches)
       if (!matches) {
         setGuitarKeyHintExpanded(false)
       } else {
@@ -550,6 +574,16 @@ export class Controls {
       syncGuideForViewport(event.matches)
     desktopGuideQuery.addEventListener('change', onDesktopGuideChange)
     this.unsubs.push(() => desktopGuideQuery.removeEventListener('change', onDesktopGuideChange))
+    this.unsubs.push(() => {
+      document.body.classList.remove(
+        'guitar-guide-open',
+        'guitar-guide-horizontal',
+        'guitar-guide-vertical',
+        'guitar-guide-side-left',
+        'guitar-guide-side-right',
+      )
+      opts.services.renderer.setGuitarFretboardVisible?.(true)
+    })
     requestAnimationFrame(() => syncGuideForViewport(desktopGuideQuery.matches))
 
     // 60Hz clock tick — imperative per §2 rule 4.

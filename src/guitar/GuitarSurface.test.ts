@@ -326,6 +326,32 @@ describe('surface lifecycle helpers', () => {
     expect(canvas.style.pointerEvents).toBe('')
   })
 
+  it('removes invisible fretboard interaction when the vertical guide owns the neck', () => {
+    const surface = new GuitarSurface()
+    const setVisible = vi.fn()
+    const renderStaticFrame = vi.fn()
+    const wake = vi.fn()
+    const harness = surface as unknown as {
+      accessibilityGrid: { setVisible: (visible: boolean) => void }
+      renderStaticFrame: (time: number) => void
+      wake: () => void
+      cleanupGestures: () => void
+      onPointerDown: (event: PointerEvent) => void
+    }
+    harness.accessibilityGrid = { setVisible }
+    harness.renderStaticFrame = renderStaticFrame
+    harness.wake = wake
+    harness.cleanupGestures = vi.fn()
+
+    surface.setGuitarFretboardVisible(false)
+    harness.onPointerDown(new MouseEvent('pointerdown') as unknown as PointerEvent)
+
+    expect(setVisible).toHaveBeenCalledWith(false)
+    expect(renderStaticFrame).toHaveBeenCalledOnce()
+    expect(wake).toHaveBeenCalledOnce()
+    expect(harness.cleanupGestures).toHaveBeenCalledOnce()
+  })
+
   it('blurs the accessibility grid for wheel gestures before deciding whether to pan', () => {
     const surface = new GuitarSurface()
     const blur = vi.fn()
